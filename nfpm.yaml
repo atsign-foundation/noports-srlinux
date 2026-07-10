@@ -1,0 +1,61 @@
+# nFPM package definition: bundles the noports NDK agent, sshnpd and
+# at_activate into a single .deb for SR Linux (Debian-based since 24.3.1).
+#
+# VERSION is substituted from the environment (set by the Makefile locally
+# and by the release workflow from the git tag).
+#
+# Build (after `make fetch agent` has staged the binaries in build/):
+#   make deb
+# Install on the router:
+#   sudo dpkg -i noports-srlinux_*.deb
+name: noports-srlinux
+arch: amd64
+platform: linux
+version: ${VERSION}
+maintainer: Atsign <info@atsign.com>
+description: >
+  NoPorts for Nokia SR Linux: an NDK agent that makes sshnpd a native
+  router feature, configured from the SR Linux CLI/gNMI (/noports) with
+  operational state in the state tree. Provides SSH (and npt port
+  tunneling, e.g. gNMI) access with no inbound listening ports.
+vendor: Atsign
+homepage: https://docs.noports.com
+license: BSD-3-Clause
+
+contents:
+  - src: build/noports-agent
+    dst: /usr/local/bin/noports-agent
+    file_info:
+      mode: 0755
+  - src: build/sshnpd
+    dst: /usr/local/bin/sshnpd
+    file_info:
+      mode: 0755
+  # APKAM enrollment tool: cut device keys on the router instead of copying
+  # an atKeys file to it (see onboard-noports.sh).
+  - src: build/at_activate
+    dst: /usr/local/bin/at_activate
+    file_info:
+      mode: 0755
+  - src: opt/noports/onboard-noports.sh
+    dst: /opt/noports/onboard-noports.sh
+    file_info:
+      mode: 0755
+  - src: appmgr/noports.yml
+    dst: /etc/opt/srlinux/appmgr/noports.yml
+    type: config
+  - src: yang/noports.yang
+    dst: /opt/noports/yang/noports.yang
+  # Keys directory (populated by APKAM enrollment post-install).
+  - dst: /etc/opt/noports/keys
+    type: dir
+    file_info:
+      mode: 0700
+  # Persistent runtime storage used as $HOME by sshnpd.
+  - dst: /var/opt/noports
+    type: dir
+    file_info:
+      mode: 0700
+
+scripts:
+  postinstall: scripts/postinstall.sh

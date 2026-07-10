@@ -1,0 +1,115 @@
+// NoPorts as a native SR Linux feature: this module puts sshnpd
+// configuration in the router config tree (CLI/gNMI/JSON-RPC) and its
+// operational state in the state tree. Consumed by noports-agent via the
+// NDK (config-delivery-format: json).
+module noports {
+    yang-version 1.1;
+    namespace "https://atsign.com/yang/noports";
+    prefix noports;
+
+    organization "Atsign";
+    description "NoPorts (sshnpd) configuration and state for Nokia SR Linux";
+
+    revision 2026-07-09 {
+        description "Initial release: agent-managed sshnpd";
+    }
+
+    container noports {
+        description "NoPorts daemon: SSH/npt access with no listening ports";
+
+        leaf admin-state {
+            type enumeration {
+                enum enable;
+                enum disable;
+            }
+            default "disable";
+            description
+                "Enable or disable the NoPorts daemon. Requires
+                 device-atsign, manager-atsigns and device-name.";
+        }
+
+        leaf device-atsign {
+            type string {
+                pattern '@.+';
+            }
+            description "The atSign identifying this router";
+        }
+
+        leaf-list manager-atsigns {
+            type string {
+                pattern '@.+';
+            }
+            description "atSigns permitted to connect to this router";
+        }
+
+        leaf device-name {
+            type string {
+                length "1..36";
+                pattern '[a-zA-Z0-9_]+';
+            }
+            description "Device name clients use: sshnp -d <device-name>";
+        }
+
+        leaf root-server {
+            type string;
+            default "root.atsign.org";
+            description
+                "atDirectory server. Use the form proxy:<host>:443 to send
+                 all atProtocol traffic to a reverse proxy on one port when
+                 management-plane ACLs restrict egress.";
+        }
+
+        leaf key-file {
+            type string;
+            default "/etc/opt/noports/keys/device.atKeys";
+            description
+                "Path to the APKAM atKeys file, created on the router by
+                 /opt/noports/onboard-noports.sh";
+        }
+
+        leaf permit-open {
+            type string;
+            description
+                "Comma-separated host:port list npt clients may request,
+                 e.g. localhost:22,localhost:57400 for SSH and gNMI";
+        }
+
+        leaf manage-authorized-keys {
+            type boolean;
+            default true;
+            description
+                "Update authorized_keys with the session public key sent by
+                 the manager (sshnpd --sshpublickey)";
+        }
+
+        leaf verbose {
+            type boolean;
+            default false;
+            description "INFO-level sshnpd logging";
+        }
+
+        container state {
+            config false;
+            description "Operational state published by noports-agent";
+
+            leaf oper-state {
+                type string;
+                description
+                    "disabled | not-configured | awaiting-onboarding |
+                     running | retrying";
+            }
+            leaf message {
+                type string;
+                description "Human-readable detail for the current state";
+            }
+            leaf pid {
+                type uint32;
+                description "PID of the running sshnpd process";
+            }
+            leaf sshnpd-version {
+                type string;
+                description "Version reported by the packaged sshnpd binary";
+            }
+        }
+    }
+}

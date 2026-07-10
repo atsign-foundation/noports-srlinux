@@ -1,0 +1,41 @@
+# containerlab topology for developing NoPorts on SR Linux — no hardware
+# needed.
+#
+#   make fetch agent            # stage binaries in build/
+#   make lab
+#   ssh admin@clab-noports-srl-srl1        (password: NokiaSrl1!)
+#
+# The SR Linux mgmt interface gets NAT'd internet access via the Docker
+# bridge, so sshnpd can reach the atDirectory/atServers out of the box.
+# Note: DNS inside the srbase-mgmt namespace is separate from Docker's
+# resolver — if name resolution fails, check /etc/resolv.conf on the node.
+name: noports-srl
+
+topology:
+  nodes:
+    srl1:
+      kind: nokia_srlinux
+      image: ghcr.io/nokia/srlinux:latest
+      binds:
+        # Mount the repo's staged artifacts straight into the node for fast
+        # iteration (rebuild on host, `tools system app-management
+        # application noports restart` on the node). For the deb workflow,
+        # drop the binds and `dpkg -i` the package instead.
+        - ../appmgr/noports.yml:/etc/opt/srlinux/appmgr/noports.yml:ro
+        - ../yang:/opt/noports/yang:ro
+        - ../opt/noports/onboard-noports.sh:/opt/noports/onboard-noports.sh:ro
+        - ../build/noports-agent:/usr/local/bin/noports-agent:ro
+        - ../build/sshnpd:/usr/local/bin/sshnpd:ro
+        - ../build/at_activate:/usr/local/bin/at_activate:ro
+        # Local-only secrets dir (gitignored): APKAM keys land here.
+        - ./secrets:/etc/opt/noports
+
+    # A plain Linux box to run the sshnp client from, simulating the
+    # operator's machine. Install sshnp + client atKeys here to test the
+    # full end-to-end rendezvous.
+    client:
+      kind: linux
+      image: debian:bookworm-slim
+      cmd: sleep infinity
+
+  links: []

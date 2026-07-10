@@ -1,0 +1,176 @@
+name: CI
+
+on:
+  push:
+    branches: [trunk]
+  pull_request:
+    branches: [trunk]
+  workflow_dispatch:
+
+permissions: # added using https://github.com/step-security/secure-workflows
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc # v2.15.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version: "1.24"
+          cache-dependency-path: agent/go.sum
+      - name: shellcheck
+        run: shellcheck opt/noports/*.sh scripts/*.sh
+      - name: Validate YANG module
+        run: |
+          pip install pyang
+          pyang --strict yang/noports.yang
+      - name: go vet + gofmt
+        working-directory: agent
+        run: |
+          go vet ./...
+          test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc # v2.15.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version: "1.24"
+          cache-dependency-path: agent/go.sum
+      - name: Build noports-agent
+        working-directory: agent
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          go build -trimpath \
+            -ldflags "-s -w -X main.version=0.0.0-ci${{ github.run_number }}" \
+            -o ../build/noports-agent .
+      - name: Fetch pinned sshnpd release binaries
+        run: ./scripts/fetch-sshnpd.sh
+      - name: Build deb with nFPM
+        run: |
+          docker run --rm -e VERSION=0.0.0-ci${{ github.run_number }} \
+            -v $PWD:/tmp/pkg -w /tmp/pkg \
+            goreleaser/nfpm package --config nfpm.yaml --packager deb --target build/
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: noports-srlinux-deb
+          path: build/*.deb
+          if-no-files-found: error
+
+  # Deploy a real SR Linux node, install the deb, configure /noports from the
+  # CLI and assert the NDK agent reacts: YANG loads, config round-trips, and
+  # the agent publishes state. No atKeys exist in CI, so the expected steady
+  # state is "awaiting-onboarding" — proving everything except the atProtocol
+  # session itself.
+  smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc # v2.15.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: noports-srlinux-deb
+          path: build
+      - name: Install containerlab
+        run: bash -c "$(curl -sL https://get.containerlab.dev)"
+      - name: Deploy SR Linux node
+        run: sudo containerlab deploy -t clab/ci.clab.yml
+      - name: Wait for SR Linux CLI
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec clab-noports-ci-srl1 sr_cli 'show version' >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "SR Linux CLI did not become ready" >&2
+          exit 1
+      - name: Install the deb on the node
+        run: |
+          docker cp build/*.deb clab-noports-ci-srl1:/tmp/noports-srlinux.deb
+          docker exec -u root clab-noports-ci-srl1 dpkg -i /tmp/noports-srlinux.deb
+      - name: Reload app_mgr and assert the noports app is registered
+        run: |
+          # The deb postinstall already reloads app_mgr, which kicks off a
+          # YANG reload (new module); tools commands are rejected while that
+          # runs, so retry until the system accepts the reload.
+          for i in $(seq 1 24); do
+            if docker exec clab-noports-ci-srl1 sr_cli 'tools system app-management application app_mgr reload'; then
+              break
+            fi
+            sleep 5
+          done
+          for i in $(seq 1 12); do
+            OUT=$(docker exec clab-noports-ci-srl1 sr_cli 'show system application noports' 2>/dev/null || true)
+            echo "$OUT"
+            if echo "$OUT" | grep -q noports; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "noports app never appeared in app_mgr" >&2
+          docker exec clab-noports-ci-srl1 sh -c 'cat /var/log/srlinux/stdout/noports*' 2>/dev/null || true
+          exit 1
+      - name: Configure /noports from the CLI
+        run: |
+          # Retry: config sessions are also rejected while the YANG reload
+          # triggered by the install is still in progress.
+          for i in $(seq 1 12); do
+            printf '%s\n' \
+              'enter candidate' \
+              'set / noports device-atsign @ci_device' \
+              'set / noports manager-atsigns [ @ci_manager ]' \
+              'set / noports device-name ci_router' \
+              'set / noports admin-state enable' \
+              'commit now' \
+              'quit' | docker exec -i clab-noports-ci-srl1 sr_cli || true
+            if docker exec clab-noports-ci-srl1 sr_cli 'info from running / noports admin-state' 2>/dev/null | grep -q enable; then
+              echo "config committed"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "could not commit /noports config" >&2
+          exit 1
+      - name: Assert agent consumed config and published state
+        run: |
+          for i in $(seq 1 12); do
+            OUT=$(docker exec clab-noports-ci-srl1 sr_cli 'info from state / noports state' 2>/dev/null || true)
+            echo "$OUT"
+            if echo "$OUT" | grep -q "awaiting-onboarding"; then
+              echo "NDK config -> agent -> state round-trip verified"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "agent never published awaiting-onboarding state" >&2
+          docker exec clab-noports-ci-srl1 sh -c 'cat /var/log/srlinux/stdout/noports*' 2>/dev/null || true
+          exit 1
+      - name: Assert packaged binaries execute inside the srbase-mgmt netns
+        run: |
+          for BIN in sshnpd at_activate; do
+            OUT=$(docker exec -u root clab-noports-ci-srl1 \
+              ip netns exec srbase-mgmt /usr/local/bin/$BIN --help 2>&1 || true)
+            echo "$OUT" | head -3
+            echo "$OUT" | grep -qi "atsign\|usage" || {
+              echo "$BIN did not produce usage output in srbase-mgmt" >&2
+              exit 1
+            }
+          done
+      - name: Destroy topology
+        if: always()
+        run: sudo containerlab destroy -t clab/ci.clab.yml || true
