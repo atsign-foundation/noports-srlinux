@@ -71,6 +71,7 @@ restarting it with backoff if it exits, and publishing
 | [`appmgr/noports.yml`](appmgr/noports.yml) | `/etc/opt/srlinux/appmgr/noports.yml` | Registers the agent with `app_mgr` |
 | [`yang/noports.yang`](yang/noports.yang) | `/opt/noports/yang/` | Models `/noports` config + state |
 | [`onboard-noports.sh`](opt/noports/onboard-noports.sh) | `/opt/noports/onboard-noports.sh` | One-time APKAM device enrollment |
+| Rendered NoPorts config | `/etc/opt/noports/sshnpd.yaml` | Written by the agent on every commit — do not edit |
 | APKAM atKeys | `/etc/opt/noports/keys/` | Device identity, created by enrollment |
 
 Because the configuration lives in the router's config tree, it persists in
@@ -204,9 +205,11 @@ checked with `go vet` and `gofmt`.
 
 ## Roadmap
 
-- **Done:** NDK agent with CLI/gNMI config and state, APKAM on-router
-  enrollment, proxy-mode (443-only) egress, deb packaging, containerlab
-  smoke test in CI, automated upstream sshnpd bumps.
+- **Done:** NDK agent with CLI/gNMI config and state, full sshnpd.yaml
+  config surface (access/device/ssh/runtime) rendered from the config tree,
+  APKAM on-router enrollment, proxy-mode (443-only) egress, deb packaging,
+  containerlab smoke test in CI, automated upstream sshnpd bumps with
+  config-schema drift detection ([upstream/](upstream/README.md)).
 - **Next:** hardware validation (7220/7250) and an end-to-end lab guide with
   real atSigns; submission to the
   [NDK apps catalog](https://learn.srlinux.dev/ndk/apps/).

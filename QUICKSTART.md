@@ -63,6 +63,14 @@ Connect — from your machine, anywhere on the internet:
 sshnp -f @manager -t @mydevice -d srl-router-1 -u admin
 ```
 
+Bonus — tunnel gNMI without SSH (add `localhost:57400` to permit-open
+first: `set / noports access permit-open [ localhost:22 localhost:57400 ]`):
+
+```bash
+npt -f @manager -t @mydevice -d srl-router-1 -r localhost -p 57400 -l 57400
+gnmic -a localhost:57400 -u admin --skip-verify capabilities
+```
+
 ## Path B: real router
 
 Download the `.deb` from the
@@ -105,6 +113,7 @@ sshnp -f @manager -r @rv_oc -t @mydevice -d srl-router-1 -u admin \
 | Name resolution fails on the node | DNS in the `srbase-mgmt` namespace is separate from the default namespace — check `/etc/resolv.conf` and the mgmt network-instance DNS config. |
 | Daemon runs but `sshnp` can't connect | Verify the client uses the same device name (`-d`), the manager atSign is in `access managers`, and (behind strict ACLs) that the relay chosen with `-r` is reachable outbound from the router. |
 | Re-enrolling a device | Delete the key file in `/etc/opt/noports/keys/`, revoke the old enrollment (`at_activate revoke`), and run the onboard script again. |
+| What config is sshnpd actually running with? | `cat /etc/opt/noports/sshnpd.yaml` — rendered by the agent from `/noports` on every commit. Don't edit it; change the config tree and commit instead. |
 
 Config changes take effect on `commit` — the agent restarts sshnpd with the
 new settings automatically. `set / noports admin-state disable` + commit
