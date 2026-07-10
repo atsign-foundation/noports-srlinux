@@ -16,7 +16,7 @@ build/sshnpd:
 	./scripts/fetch-sshnpd.sh
 
 lint:
-	shellcheck opt/sshnpd/run-sshnpd.sh scripts/*.sh
+	shellcheck opt/sshnpd/*.sh scripts/*.sh
 	pyang --strict yang/noports-sshnpd.yang
 
 # Spin up / tear down the containerlab dev topology

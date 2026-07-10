@@ -21,7 +21,9 @@ topology:
         # binds and `dpkg -i` the package instead.
         - ../appmgr/sshnpd.yml:/etc/opt/srlinux/appmgr/sshnpd.yml:ro
         - ../opt/sshnpd/run-sshnpd.sh:/opt/sshnpd/run-sshnpd.sh:ro
+        - ../opt/sshnpd/onboard-sshnpd.sh:/opt/sshnpd/onboard-sshnpd.sh:ro
         - ../build/sshnpd:/usr/local/bin/sshnpd:ro
+        - ../build/at_activate:/usr/local/bin/at_activate:ro
         # Local-only secrets dir (gitignored): sshnpd.env + atKeys file.
         - ./secrets:/etc/opt/sshnpd
 

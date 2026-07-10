@@ -42,10 +42,12 @@ so the integration is deliberately thin:
 | Piece | On-router path | Purpose |
 |---|---|---|
 | `sshnpd` binary | `/usr/local/bin/sshnpd` | Stock NoPorts release binary (x86_64) |
+| `at_activate` binary | `/usr/local/bin/at_activate` | APKAM enrollment (cuts keys on the router) |
 | [`appmgr/sshnpd.yml`](appmgr/sshnpd.yml) | `/etc/opt/srlinux/appmgr/sshnpd.yml` | Registers the app with `app_mgr` |
 | [`opt/sshnpd/run-sshnpd.sh`](opt/sshnpd/run-sshnpd.sh) | `/opt/sshnpd/run-sshnpd.sh` | Launcher: loads env, enters mgmt netns |
+| [`opt/sshnpd/onboard-sshnpd.sh`](opt/sshnpd/onboard-sshnpd.sh) | `/opt/sshnpd/onboard-sshnpd.sh` | One-time APKAM device enrollment |
 | [`etc/sshnpd.env.example`](etc/sshnpd.env.example) | `/etc/opt/sshnpd/sshnpd.env` | Per-device settings (atSigns, device name) |
-| atKeys file | `/etc/opt/sshnpd/keys/` | Device identity (never commit these!) |
+| APKAM atKeys | `/etc/opt/sshnpd/keys/` | Device identity, created by enrollment |
 
 The one SR Linux-specific trick: the management VRF and the local `sshd`
 live in the `srbase-mgmt` network namespace, while `app_mgr` launches apps
@@ -69,10 +71,35 @@ Grab the `.deb` from the
 sudo dpkg -i noports-srlinux_*.deb
 sudo cp /etc/opt/sshnpd/sshnpd.env.example /etc/opt/sshnpd/sshnpd.env
 sudo vi /etc/opt/sshnpd/sshnpd.env    # set device/manager atSigns, device name
-# copy your @device_key.atKeys into /etc/opt/sshnpd/keys/
 ```
 
-Register and start from the SR Linux CLI:
+### Onboard the device with APKAM (no atKeys files copied around)
+
+Enrollment cuts new, scope-limited APKAM keys **on the router**; the full
+atKeys file for the device atSign never leaves the administrator's custody.
+
+On the admin machine (any host with an authorized key for `@mydevice`),
+generate a one-time passcode:
+
+```bash
+at_activate otp -a @mydevice
+```
+
+On the router:
+
+```bash
+sudo /opt/sshnpd/onboard-sshnpd.sh <passcode>
+```
+
+While it waits, approve the request from the admin machine:
+
+```bash
+at_activate approve -a @mydevice --arx sshnpd --drx srl-router-1
+```
+
+The APKAM keys land in `/etc/opt/sshnpd/keys/` and the daemon can start.
+
+### Register and start from the SR Linux CLI
 
 ```text
 tools system app-management application app_mgr reload
@@ -80,13 +107,38 @@ show system application sshnpd
 tools system app-management application sshnpd start
 ```
 
-Connect from anywhere:
+### Connect from anywhere
 
 ```bash
 sshnp -f @manager -t @mydevice -d srl-router-1 -u admin
 # or tunnel gNMI without SSH:
 npt -f @manager -t @mydevice -d srl-router-1 -r localhost -p 57400 -l 57400
 ```
+
+## Restricted egress (management-plane ACLs)
+
+By default the atProtocol dials the atDirectory on `root.atsign.org:64100`
+and atServers on assorted high ports — typically blocked by management VRF
+ACLs. Both `sshnpd` and `at_activate` accept a `proxy:` root server, which
+skips the directory lookup and sends **all** atProtocol traffic to one
+reverse proxy on one port. In `/etc/opt/sshnpd/sshnpd.env`:
+
+```bash
+ROOT_SERVER="proxy:proxy0001.atsign.org:443"
+```
+
+Both the launcher and the onboarding script honor it. Clients use the
+equivalent flag, picking a relay with `-r`:
+
+```bash
+sshnp -f @manager -r @rv_oc -t @mydevice -d srl-router-1 \
+  --root-domain "proxy:proxy0001.atsign.org:443"
+```
+
+Note: the proxy covers atProtocol (control-plane) traffic. The session data
+path is a separate outbound connection from the router to the relay chosen
+by the client (`-r`), so a 443-only egress policy also needs a relay
+reachable on 443.
 
 ## Development
 
@@ -110,14 +162,16 @@ instead.
 ## Roadmap
 
 - **Phase 1 (current):** sshnpd as an `app_mgr`-managed app, env-file
-  configured, packaged as a deb, containerlab smoke test in CI.
+  configured, packaged as a deb, containerlab smoke test in CI, APKAM
+  on-router enrollment, proxy-mode (443-only) egress support.
 - **Phase 2:** wire up [yang/noports-sshnpd.yang](yang/noports-sshnpd.yang)
   (+ `wait-for-config`) so atSigns/device name are set from the SR Linux
   CLI/gNMI and stored in the router config; publish `oper-state` into `show`
   output via a thin [Python NDK agent](https://github.com/nokia/srlinux-ndk-py);
   submit to the [NDK apps catalog](https://learn.srlinux.dev/ndk/apps/).
-- **Phase 3:** APKAM enrollment for fleet onboarding (no atKeys files copied
-  to routers); `npt` port policy for gNMI/JSON-RPC tunneling; arm64 package.
+- **Phase 3:** fleet onboarding at scale (SPP passcodes + `at_activate auto`
+  approval); `npt` port policy for gNMI/JSON-RPC tunneling; arm64 package;
+  relay-on-443 guidance for fully locked-down egress.
 
 ## Maintainers
 

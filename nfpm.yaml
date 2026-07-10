@@ -26,8 +26,18 @@ contents:
     dst: /usr/local/bin/sshnpd
     file_info:
       mode: 0755
+  # APKAM enrollment tool: cut device keys on the router instead of copying
+  # an atKeys file to it (see onboard-sshnpd.sh).
+  - src: build/at_activate
+    dst: /usr/local/bin/at_activate
+    file_info:
+      mode: 0755
   - src: opt/sshnpd/run-sshnpd.sh
     dst: /opt/sshnpd/run-sshnpd.sh
+    file_info:
+      mode: 0755
+  - src: opt/sshnpd/onboard-sshnpd.sh
+    dst: /opt/sshnpd/onboard-sshnpd.sh
     file_info:
       mode: 0755
   - src: appmgr/sshnpd.yml

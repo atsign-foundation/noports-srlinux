@@ -20,10 +20,14 @@ source "$ENV_FILE"
 : "${DEVICE_NAME:?set DEVICE_NAME in $ENV_FILE}"
 KEY_FILE="${KEY_FILE:-/etc/opt/sshnpd/keys/${DEVICE_ATSIGN}_key.atKeys}"
 SSHNPD_BIN="${SSHNPD_BIN:-/usr/local/bin/sshnpd}"
+# Behind restrictive egress ACLs, set ROOT_SERVER="proxy:<host>:443" in the
+# env file to send all atProtocol traffic to a reverse proxy on one port.
+ROOT_SERVER="${ROOT_SERVER:-root.atsign.org}"
 EXTRA_ARGS="${EXTRA_ARGS:-}"
 
 if [ ! -f "$KEY_FILE" ]; then
-    echo "sshnpd: atKeys file $KEY_FILE not found" >&2
+    echo "sshnpd: atKeys file $KEY_FILE not found;" \
+         "run /opt/sshnpd/onboard-sshnpd.sh to enroll this device" >&2
     exit 1
 fi
 
@@ -40,4 +44,5 @@ exec ip netns exec srbase-mgmt "$SSHNPD_BIN" \
     --atsign "$DEVICE_ATSIGN" \
     --managers "$MANAGER_ATSIGN" \
     --device "$DEVICE_NAME" \
+    --root-server "$ROOT_SERVER" \
     $EXTRA_ARGS

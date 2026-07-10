@@ -25,12 +25,14 @@ curl -fsSL -o "build/${TARBALL}" "$URL"
 
 tar -xzf "build/${TARBALL}" -C build
 # The tarball extracts to a directory (historically 'sshnp/') containing the
-# binaries; locate sshnpd wherever it landed.
-SSHNPD_PATH=$(find build -type f -name sshnpd | head -n1)
-if [ -z "$SSHNPD_PATH" ]; then
-    echo "sshnpd binary not found in ${TARBALL}" >&2
-    exit 1
-fi
-cp "$SSHNPD_PATH" build/sshnpd
-chmod 0755 build/sshnpd
-echo "Staged sshnpd ${VERSION} at build/sshnpd"
+# binaries; locate the ones we package wherever they landed.
+for BIN in sshnpd at_activate; do
+    BIN_PATH=$(find build -type f -name "$BIN" -not -path "build/$BIN" | head -n1)
+    if [ -z "$BIN_PATH" ]; then
+        echo "$BIN binary not found in ${TARBALL}" >&2
+        exit 1
+    fi
+    cp "$BIN_PATH" "build/$BIN"
+    chmod 0755 "build/$BIN"
+    echo "Staged $BIN ${VERSION} at build/$BIN"
+done
