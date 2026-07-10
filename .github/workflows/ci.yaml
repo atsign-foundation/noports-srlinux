@@ -105,7 +105,15 @@ jobs:
           docker exec -u root clab-noports-ci-srl1 dpkg -i /tmp/noports-srlinux.deb
       - name: Reload app_mgr and assert the noports app is registered
         run: |
-          docker exec clab-noports-ci-srl1 sr_cli 'tools system app-management application app_mgr reload'
+          # The deb postinstall already reloads app_mgr, which kicks off a
+          # YANG reload (new module); tools commands are rejected while that
+          # runs, so retry until the system accepts the reload.
+          for i in $(seq 1 24); do
+            if docker exec clab-noports-ci-srl1 sr_cli 'tools system app-management application app_mgr reload'; then
+              break
+            fi
+            sleep 5
+          done
           for i in $(seq 1 12); do
             OUT=$(docker exec clab-noports-ci-srl1 sr_cli 'show system application noports' 2>/dev/null || true)
             echo "$OUT"
@@ -119,14 +127,25 @@ jobs:
           exit 1
       - name: Configure /noports from the CLI
         run: |
-          printf '%s\n' \
-            'enter candidate' \
-            'set / noports device-atsign @ci_device' \
-            'set / noports manager-atsigns [ @ci_manager ]' \
-            'set / noports device-name ci_router' \
-            'set / noports admin-state enable' \
-            'commit now' \
-            'quit' | docker exec -i clab-noports-ci-srl1 sr_cli
+          # Retry: config sessions are also rejected while the YANG reload
+          # triggered by the install is still in progress.
+          for i in $(seq 1 12); do
+            printf '%s\n' \
+              'enter candidate' \
+              'set / noports device-atsign @ci_device' \
+              'set / noports manager-atsigns [ @ci_manager ]' \
+              'set / noports device-name ci_router' \
+              'set / noports admin-state enable' \
+              'commit now' \
+              'quit' | docker exec -i clab-noports-ci-srl1 sr_cli || true
+            if docker exec clab-noports-ci-srl1 sr_cli 'info from running / noports admin-state' 2>/dev/null | grep -q enable; then
+              echo "config committed"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "could not commit /noports config" >&2
+          exit 1
       - name: Assert agent consumed config and published state
         run: |
           for i in $(seq 1 12); do
