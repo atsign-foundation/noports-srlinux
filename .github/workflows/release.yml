@@ -48,4 +48,8 @@ jobs:
             --title "$GITHUB_REF_NAME" \
             --generate-notes \
             --notes "Packages sshnpd $(cat SSHNPD_VERSION) for Nokia SR Linux." \
+            --latest \
           || gh release upload "$GITHUB_REF_NAME" build/*.deb --clobber
+          # If the release pre-existed (created via the UI, possibly flagged
+          # pre-release, which blocks "latest"), normalize the flags.
+          gh release edit "$GITHUB_REF_NAME" --prerelease=false --latest
