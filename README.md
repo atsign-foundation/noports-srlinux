@@ -160,7 +160,7 @@ npt -f @manager -t @mydevice -d srl-router-1 -r localhost -p 57400 -l 57400
 
 ## Restricted egress (management-plane ACLs)
 
-By default the atProtocol dials the atDirectory on `root.atsign.org:64100`
+By default the atProtocol dials the atDirectory on `root.atsign.org:64`
 and atServers on assorted high ports — typically blocked by management VRF
 ACLs. The `proxy:` root-server form skips the directory lookup and sends
 **all** atProtocol traffic to one reverse proxy on one port:

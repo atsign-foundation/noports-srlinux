@@ -46,7 +46,9 @@ func (a *App) supervise(ctx context.Context, cfg *Config, done chan struct{}) {
 
 		cmd := exec.CommandContext(ctx, "ip", args...)
 		// sshnpd keeps local storage under $HOME; give it a persistent home.
-		cmd.Env = append(os.Environ(), "HOME="+sshnpdHomeDir)
+		// sshnpd v5.15.1 null-checks $USER at startup and crashes when it
+		// is unset (supervised processes often lack it); we run as root.
+		cmd.Env = append(os.Environ(), "HOME="+sshnpdHomeDir, "USER=root")
 		// app_mgr collects our stdout/stderr; pass the child's through.
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
