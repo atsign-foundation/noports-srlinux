@@ -1,6 +1,6 @@
 module github.com/atsign-foundation/noports-srlinux/agent
 
-go 1.22.0
+go 1.25.0
 
 require (
 	github.com/rs/zerolog v1.34.0
@@ -19,10 +19,10 @@ require (
 	github.com/openconfig/gnmi v0.14.1 // indirect
 	github.com/openconfig/gnmic/pkg/api v0.1.9 // indirect
 	github.com/openconfig/grpctunnel v0.1.0 // indirect
-	golang.org/x/net v0.34.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/oauth2 v0.25.0 // indirect
-	golang.org/x/sys v0.29.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250106144421-5f5ef82da422 // indirect
 	google.golang.org/grpc v1.69.2 // indirect
 	google.golang.org/protobuf v1.36.2 // indirect
