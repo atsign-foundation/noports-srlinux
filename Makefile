@@ -3,7 +3,7 @@
 # Package version; the release workflow overrides this from the git tag.
 VERSION ?= 0.0.0-dev
 
-GO_IMAGE ?= golang:1.24
+GO_IMAGE ?= golang:1.25
 
 # Download the pinned sshnpd release binaries (see SSHNPD_VERSION) into build/
 fetch:
