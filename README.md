@@ -182,6 +182,36 @@ path is a separate outbound connection from the router to the relay chosen
 by the client (`-r`), so a 443-only egress policy also needs a relay
 reachable on 443.
 
+## Fleet-scale access control: policy atSigns
+
+Listing manager atSigns per router works for a handful of devices, but at
+fleet scale it means touching every router's config to grant or revoke an
+operator's access. A **policy atSign** centralizes that decision: the
+router delegates each incoming request to a
+[NoPorts Policy Service](https://docs.noports.com) running as that atSign,
+which answers allow/deny based on centrally-managed rules (who, which
+device group, which ports).
+
+```text
+set / noports access policy @policy_np
+set / noports device group core-routers
+```
+
+Semantics (at least one of `access managers` / `access policy` must be
+set):
+
+- **policy only** — every request is decided by the policy service; the
+  router config never changes as staff or entitlements change. NoPorts'
+  `permit-open` default also shifts from `localhost:22,localhost:3389` to
+  `*:*`, deferring port restrictions to policy.
+- **managers + policy** — atSigns in `access managers` get direct access
+  (policy is not consulted for them); everyone else is checked against the
+  policy service. Useful as a break-glass list alongside central control.
+
+The `device group` name is sent to the policy service with each request,
+so rules can target groups (e.g. "NOC tier-2 may reach `core-routers` on
+port 22") instead of individual devices.
+
 ## Development
 
 No hardware needed — SR Linux ships as a free public container image:
