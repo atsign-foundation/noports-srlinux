@@ -15,6 +15,9 @@ Nokia [SR Linux](https://learn.srlinux.dev) router as a first-class,
 gNMI/JSON-RPC — access to the router with **no inbound listening ports** on
 the management plane.
 
+**New here? Start with the [Quickstart](QUICKSTART.md)** — virtual lab to
+SSH session in about ten minutes, no hardware required.
+
 ## Who is this for?
 
 ### Network operators
@@ -164,11 +167,18 @@ instead.
 - **Phase 1 (current):** sshnpd as an `app_mgr`-managed app, env-file
   configured, packaged as a deb, containerlab smoke test in CI, APKAM
   on-router enrollment, proxy-mode (443-only) egress support.
-- **Phase 2:** wire up [yang/noports-sshnpd.yang](yang/noports-sshnpd.yang)
-  (+ `wait-for-config`) so atSigns/device name are set from the SR Linux
-  CLI/gNMI and stored in the router config; publish `oper-state` into `show`
-  output via a thin [Python NDK agent](https://github.com/nokia/srlinux-ndk-py);
-  submit to the [NDK apps catalog](https://learn.srlinux.dev/ndk/apps/).
+- **Phase 2:** native CLI/gNMI configuration. The
+  [yang/noports-sshnpd.yang](yang/noports-sshnpd.yang) module ships in the
+  deb but is **not yet active** — today all configuration is via the env
+  file, and the SR Linux CLI only provides app lifecycle commands
+  (`tools system app-management ...`). Activating it means uncommenting the
+  `yang-modules` section of the app_mgr yml **and** teaching the app to
+  consume config delivered by app_mgr (`wait-for-config` plus a config shim
+  or a thin [Python NDK agent](https://github.com/nokia/srlinux-ndk-py)).
+  Done, it makes NoPorts part of the router config tree
+  (`set / sshnpd device-atsign @mydevice`, persisted in startup config,
+  streamable over telemetry) and publishes `oper-state` into `show` output.
+  Then: submit to the [NDK apps catalog](https://learn.srlinux.dev/ndk/apps/).
 - **Phase 3:** fleet onboarding at scale (SPP passcodes + `at_activate auto`
   approval); `npt` port policy for gNMI/JSON-RPC tunneling; arm64 package;
   relay-on-443 guidance for fully locked-down egress.
