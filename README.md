@@ -21,8 +21,8 @@ the management plane.
 --{ running }--[  ]--
 A:srl1# enter candidate
 A:srl1# set / noports device-atsign @mydevice
-A:srl1# set / noports manager-atsigns [ @manager ]
-A:srl1# set / noports device-name srl-router-1
+A:srl1# set / noports access managers [ @manager ]
+A:srl1# set / noports device name srl-router-1
 A:srl1# set / noports admin-state enable
 A:srl1# commit now
 A:srl1# info from state / noports state
@@ -78,6 +78,24 @@ the startup config, replays on reboot, streams over gNMI telemetry, and
 works from any management interface (CLI, gNMI, JSON-RPC) — no environment
 files, no hand-managed daemons.
 
+### The router CLI manipulates NoPorts' own config file
+
+NoPorts is natively configured by a YAML file (`sshnpd.yaml`). The YANG
+model mirrors its sections (`access`, `device`, `ssh`, `runtime`), and on
+every commit the agent **renders** `/etc/opt/noports/sshnpd.yaml` from the
+config tree and runs `sshnpd --config` against it — so the SR Linux CLI is
+effectively editing the NoPorts config file, with candidate/commit/rollback
+semantics on top. Don't edit the rendered file by hand; it's overwritten on
+every commit. The full surface is available, e.g.:
+
+```text
+set / noports access policy @policy_np          # delegated authorization
+set / noports access permit-open [ localhost:22 localhost:57400 ]
+set / noports device group core-routers         # fleet management
+set / noports ssh sshd-port 2022
+set / noports runtime clear-cached-pks true     # after an atSign reset
+```
+
 Since release 24.3.1 SR Linux is Debian-based, so the deliverable is a
 single `.deb` built with [nFPM](https://nfpm.goreleaser.com/). The pinned
 sshnpd release lives in [SSHNPD_VERSION](SSHNPD_VERSION) and is bumped
@@ -99,8 +117,8 @@ Configure from the SR Linux CLI:
 ```text
 enter candidate
 set / noports device-atsign @mydevice
-set / noports manager-atsigns [ @manager ]
-set / noports device-name srl-router-1
+set / noports access managers [ @manager ]
+set / noports device name srl-router-1
 set / noports admin-state enable
 commit now
 ```

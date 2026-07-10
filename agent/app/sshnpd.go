@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"os/exec"
-	"strings"
 	"time"
 )
 
@@ -36,21 +35,9 @@ func (a *App) supervise(ctx context.Context, cfg *Config, done chan struct{}) {
 
 		// sshnpd must run in the srbase-mgmt namespace: the management VRF
 		// (outbound to the atServers) and the local sshd both live there.
+		// All settings come from the rendered NoPorts config file.
 		args := []string{"netns", "exec", mgmtNetns, sshnpdBinPath,
-			"--key-file", cfg.KeyFile,
-			"--atsign", cfg.DeviceAtsign,
-			"--managers", strings.Join(cfg.ManagerAtsigns, ","),
-			"--device", cfg.DeviceName,
-			"--root-server", cfg.RootServer,
-		}
-		if cfg.ManageAuthorizedKeys == nil || *cfg.ManageAuthorizedKeys {
-			args = append(args, "--sshpublickey")
-		}
-		if cfg.PermitOpen != "" {
-			args = append(args, "--permit-open", cfg.PermitOpen)
-		}
-		if cfg.Verbose {
-			args = append(args, "-v")
+			"--config", noportsConfigPath,
 		}
 
 		if err := os.MkdirAll(sshnpdHomeDir, 0o700); err != nil {

@@ -1,7 +1,9 @@
-// NoPorts as a native SR Linux feature: this module puts sshnpd
-// configuration in the router config tree (CLI/gNMI/JSON-RPC) and its
-// operational state in the state tree. Consumed by noports-agent via the
-// NDK (config-delivery-format: json).
+// NoPorts as a native SR Linux feature: this module puts the full sshnpd
+// configuration surface in the router config tree (CLI/gNMI/JSON-RPC) and
+// its operational state in the state tree. The structure mirrors the
+// sections of NoPorts' own config file (sshnpd.yaml), which noports-agent
+// renders to /etc/opt/noports/sshnpd.yaml on every commit and feeds to
+// sshnpd via --config.
 module noports {
     yang-version 1.1;
     namespace "https://atsign.com/yang/noports";
@@ -10,8 +12,17 @@ module noports {
     organization "Atsign";
     description "NoPorts (sshnpd) configuration and state for Nokia SR Linux";
 
-    revision 2026-07-09 {
-        description "Initial release: agent-managed sshnpd";
+    revision 2026-07-10 {
+        description
+            "Model the full sshnpd.yaml schema: access/device/ssh/runtime
+             sections; agent renders the NoPorts config file";
+    }
+
+    typedef atsign {
+        type string {
+            pattern '@.+';
+        }
+        description "An atSign, including the leading @";
     }
 
     container noports {
@@ -25,29 +36,13 @@ module noports {
             default "disable";
             description
                 "Enable or disable the NoPorts daemon. Requires
-                 device-atsign, manager-atsigns and device-name.";
+                 device-atsign and at least one of access/managers or
+                 access/policy.";
         }
 
         leaf device-atsign {
-            type string {
-                pattern '@.+';
-            }
+            type atsign;
             description "The atSign identifying this router";
-        }
-
-        leaf-list manager-atsigns {
-            type string {
-                pattern '@.+';
-            }
-            description "atSigns permitted to connect to this router";
-        }
-
-        leaf device-name {
-            type string {
-                length "1..36";
-                pattern '[a-zA-Z0-9_]+';
-            }
-            description "Device name clients use: sshnp -d <device-name>";
         }
 
         leaf root-server {
@@ -67,25 +62,100 @@ module noports {
                  /opt/noports/onboard-noports.sh";
         }
 
-        leaf permit-open {
-            type string;
-            description
-                "Comma-separated host:port list npt clients may request,
-                 e.g. localhost:22,localhost:57400 for SSH and gNMI";
+        container access {
+            description "Who may connect, and to what";
+
+            leaf-list managers {
+                type atsign;
+                description
+                    "atSigns with direct access to this router (permit-open
+                     applies; policy is ignored for managers)";
+            }
+
+            leaf policy {
+                type atsign;
+                description
+                    "atSign of a NoPorts policy service for fine-grained,
+                     delegated authorization";
+            }
+
+            leaf-list permit-open {
+                type string;
+                description
+                    "host:port pairs clients may reach, e.g. localhost:22
+                     and localhost:57400 (gNMI). Empty means the NoPorts
+                     defaults (localhost:22, localhost:3389 without policy;
+                     *:* with policy).";
+            }
         }
 
-        leaf manage-authorized-keys {
-            type boolean;
-            default true;
-            description
-                "Update authorized_keys with the session public key sent by
-                 the manager (sshnpd --sshpublickey)";
+        container device {
+            description "Device identity as seen by NoPorts clients";
+
+            leaf name {
+                type string {
+                    length "1..36";
+                    pattern '[a-zA-Z0-9_]+';
+                }
+                description "Device name clients use: sshnp -d <name>";
+            }
+
+            leaf group {
+                type string;
+                description "Device group name, used for fleet management";
+            }
         }
 
-        leaf verbose {
-            type boolean;
-            default false;
-            description "INFO-level sshnpd logging";
+        container ssh {
+            description "How sessions reach the local sshd";
+
+            leaf add-public-keys {
+                type boolean;
+                default true;
+                description
+                    "Update authorized_keys with the session public key sent
+                     by the manager (sshnpd.yaml: ssh/add-publickeys)";
+            }
+
+            leaf ssh-client {
+                type enumeration {
+                    enum openssh;
+                    enum dart;
+                }
+                default "openssh";
+                description "Client used for outbound ssh connections";
+            }
+
+            leaf sshd-port {
+                type uint16;
+                default 22;
+                description "Port sshd listens on (internal interface)";
+            }
+
+            leaf-list public-key-permissions {
+                type string;
+                description
+                    "Options prefixed to authorized_keys entries added via
+                     add-public-keys (see sshd AUTHORIZED KEYS FILE FORMAT)";
+            }
+        }
+
+        container runtime {
+            description "Daemon runtime settings";
+
+            leaf verbose {
+                type boolean;
+                default true;
+                description "INFO-level sshnpd logging";
+            }
+
+            leaf clear-cached-pks {
+                type boolean;
+                default false;
+                description
+                    "Clear the cached public keys on next start (use after
+                     resetting an atSign)";
+            }
         }
 
         container state {

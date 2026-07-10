@@ -78,6 +78,13 @@ func (a *App) applyConfig(ctx context.Context) {
 		return
 	}
 
+	// Render NoPorts' own config file from the committed tree; sshnpd is
+	// started with --config pointing at it.
+	if err := a.renderConfigFile(cfg); err != nil {
+		a.setState(operRetrying, "failed to render "+noportsConfigPath+": "+err.Error(), 0)
+		return
+	}
+
 	epochCtx, cancel := context.WithCancel(ctx)
 	a.cancelSupervisor = cancel
 	a.supervisorDone = make(chan struct{})

@@ -133,8 +133,9 @@ jobs:
             printf '%s\n' \
               'enter candidate' \
               'set / noports device-atsign @ci_device' \
-              'set / noports manager-atsigns [ @ci_manager ]' \
-              'set / noports device-name ci_router' \
+              'set / noports access managers [ @ci_manager ]' \
+              'set / noports access permit-open [ localhost:22 localhost:57400 ]' \
+              'set / noports device name ci_router' \
               'set / noports admin-state enable' \
               'commit now' \
               'quit' | docker exec -i clab-noports-ci-srl1 sr_cli || true
@@ -160,6 +161,14 @@ jobs:
           echo "agent never published awaiting-onboarding state" >&2
           docker exec clab-noports-ci-srl1 sh -c 'cat /var/log/srlinux/stdout/noports*' 2>/dev/null || true
           exit 1
+      - name: Assert agent rendered the NoPorts config file
+        run: |
+          OUT=$(docker exec clab-noports-ci-srl1 cat /etc/opt/noports/sshnpd.yaml)
+          echo "$OUT"
+          echo "$OUT" | grep -q '@ci_device' || { echo "device atsign missing from rendered sshnpd.yaml" >&2; exit 1; }
+          echo "$OUT" | grep -q 'ci_router' || { echo "device name missing from rendered sshnpd.yaml" >&2; exit 1; }
+          echo "$OUT" | grep -q 'localhost:57400' || { echo "permit-open missing from rendered sshnpd.yaml" >&2; exit 1; }
+          echo "CLI config -> rendered NoPorts yaml verified"
       - name: Assert packaged binaries execute inside the srbase-mgmt netns
         run: |
           for BIN in sshnpd at_activate; do

@@ -33,19 +33,19 @@ get_leaf() {
 }
 
 DEVICE_ATSIGN="${DEVICE_ATSIGN:-$(get_leaf device-atsign)}"
-DEVICE_NAME="${DEVICE_NAME:-$(get_leaf device-name)}"
+DEVICE_NAME="${DEVICE_NAME:-$(get_leaf "device name")}"
 ROOT_SERVER="${ROOT_SERVER:-$(get_leaf root-server)}"
 KEY_FILE="${KEY_FILE:-$(get_leaf key-file)}"
 ROOT_SERVER="${ROOT_SERVER:-root.atsign.org}"
 KEY_FILE="${KEY_FILE:-/etc/opt/noports/keys/device.atKeys}"
 
 if [ -z "$DEVICE_ATSIGN" ] || [ -z "$DEVICE_NAME" ]; then
-    echo "onboard: device-atsign / device-name not configured." >&2
+    echo "onboard: device-atsign / device name not configured." >&2
     echo "Configure first, e.g. from the SR Linux CLI:" >&2
     echo "  enter candidate" >&2
     echo "  set / noports device-atsign @mydevice" >&2
-    echo "  set / noports device-name srl-router-1" >&2
-    echo "  set / noports manager-atsigns [ @manager ]" >&2
+    echo "  set / noports device name srl-router-1" >&2
+    echo "  set / noports access managers [ @manager ]" >&2
     echo "  set / noports admin-state enable" >&2
     echo "  commit now" >&2
     exit 1
