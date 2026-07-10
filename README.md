@@ -21,8 +21,8 @@ the management plane.
 --{ running }--[  ]--
 A:srl1# enter candidate
 A:srl1# set / noports device-atsign @mydevice
-A:srl1# set / noports manager-atsigns [ @manager ]
-A:srl1# set / noports device-name srl-router-1
+A:srl1# set / noports access managers [ @manager ]
+A:srl1# set / noports device name srl-router-1
 A:srl1# set / noports admin-state enable
 A:srl1# commit now
 A:srl1# info from state / noports state
@@ -71,12 +71,31 @@ restarting it with backoff if it exits, and publishing
 | [`appmgr/noports.yml`](appmgr/noports.yml) | `/etc/opt/srlinux/appmgr/noports.yml` | Registers the agent with `app_mgr` |
 | [`yang/noports.yang`](yang/noports.yang) | `/opt/noports/yang/` | Models `/noports` config + state |
 | [`onboard-noports.sh`](opt/noports/onboard-noports.sh) | `/opt/noports/onboard-noports.sh` | One-time APKAM device enrollment |
+| Rendered NoPorts config | `/etc/opt/noports/sshnpd.yaml` | Written by the agent on every commit — do not edit |
 | APKAM atKeys | `/etc/opt/noports/keys/` | Device identity, created by enrollment |
 
 Because the configuration lives in the router's config tree, it persists in
 the startup config, replays on reboot, streams over gNMI telemetry, and
 works from any management interface (CLI, gNMI, JSON-RPC) — no environment
 files, no hand-managed daemons.
+
+### The router CLI manipulates NoPorts' own config file
+
+NoPorts is natively configured by a YAML file (`sshnpd.yaml`). The YANG
+model mirrors its sections (`access`, `device`, `ssh`, `runtime`), and on
+every commit the agent **renders** `/etc/opt/noports/sshnpd.yaml` from the
+config tree and runs `sshnpd --config` against it — so the SR Linux CLI is
+effectively editing the NoPorts config file, with candidate/commit/rollback
+semantics on top. Don't edit the rendered file by hand; it's overwritten on
+every commit. The full surface is available, e.g.:
+
+```text
+set / noports access policy @policy_np          # delegated authorization
+set / noports access permit-open [ localhost:22 localhost:57400 ]
+set / noports device group core-routers         # fleet management
+set / noports ssh sshd-port 2022
+set / noports runtime clear-cached-pks true     # after an atSign reset
+```
 
 Since release 24.3.1 SR Linux is Debian-based, so the deliverable is a
 single `.deb` built with [nFPM](https://nfpm.goreleaser.com/). The pinned
@@ -99,8 +118,8 @@ Configure from the SR Linux CLI:
 ```text
 enter candidate
 set / noports device-atsign @mydevice
-set / noports manager-atsigns [ @manager ]
-set / noports device-name srl-router-1
+set / noports access managers [ @manager ]
+set / noports device name srl-router-1
 set / noports admin-state enable
 commit now
 ```
@@ -186,9 +205,11 @@ checked with `go vet` and `gofmt`.
 
 ## Roadmap
 
-- **Done:** NDK agent with CLI/gNMI config and state, APKAM on-router
-  enrollment, proxy-mode (443-only) egress, deb packaging, containerlab
-  smoke test in CI, automated upstream sshnpd bumps.
+- **Done:** NDK agent with CLI/gNMI config and state, full sshnpd.yaml
+  config surface (access/device/ssh/runtime) rendered from the config tree,
+  APKAM on-router enrollment, proxy-mode (443-only) egress, deb packaging,
+  containerlab smoke test in CI, automated upstream sshnpd bumps with
+  config-schema drift detection ([upstream/](upstream/README.md)).
 - **Next:** hardware validation (7220/7250) and an end-to-end lab guide with
   real atSigns; submission to the
   [NDK apps catalog](https://learn.srlinux.dev/ndk/apps/).

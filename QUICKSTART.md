@@ -31,8 +31,8 @@ ssh admin@clab-noports-srl-srl1   # password: NokiaSrl1!
 ```text
 enter candidate
 set / noports device-atsign @mydevice
-set / noports manager-atsigns [ @manager ]
-set / noports device-name srl-router-1
+set / noports access managers [ @manager ]
+set / noports device name srl-router-1
 set / noports admin-state enable
 commit now
 info from state / noports state   # expect: oper-state awaiting-onboarding
@@ -61,6 +61,14 @@ Connect — from your machine, anywhere on the internet:
 
 ```bash
 sshnp -f @manager -t @mydevice -d srl-router-1 -u admin
+```
+
+Bonus — tunnel gNMI without SSH (add `localhost:57400` to permit-open
+first: `set / noports access permit-open [ localhost:22 localhost:57400 ]`):
+
+```bash
+npt -f @manager -t @mydevice -d srl-router-1 -r localhost -p 57400 -l 57400
+gnmic -a localhost:57400 -u admin --skip-verify capabilities
 ```
 
 ## Path B: real router
@@ -97,14 +105,15 @@ sshnp -f @manager -r @rv_oc -t @mydevice -d srl-router-1 -u admin \
 
 | Symptom | Check |
 |---|---|
-| `oper-state not-configured` | The `message` leaf lists the missing leaves (device-atsign, manager-atsigns, device-name). |
+| `oper-state not-configured` | The `message` leaf lists the missing leaves (device-atsign, access managers, device name). |
 | `oper-state awaiting-onboarding` | Expected before enrollment — run the onboard script. If it persists after enrollment, confirm the keys landed at the configured `key-file` path. |
 | `oper-state retrying` | sshnpd keeps exiting — read the app log: `cat /var/log/srlinux/stdout/noports*` from the bash shell. Common causes: no egress (try proxy mode), bad keys, clock skew. |
 | App not listed in `show system application noports` | `tools system app-management application app_mgr reload`, then check `/etc/opt/srlinux/appmgr/noports.yml` exists. |
 | Onboard script hangs then fails | Enrollment wasn't approved in time — check from your machine with `at_activate list -a @mydevice -s pending`, approve, and re-run. If it never reaches the atServer, test egress: `ip netns exec srbase-mgmt curl -v https://proxy0001.atsign.org:443` and use proxy mode. |
 | Name resolution fails on the node | DNS in the `srbase-mgmt` namespace is separate from the default namespace — check `/etc/resolv.conf` and the mgmt network-instance DNS config. |
-| Daemon runs but `sshnp` can't connect | Verify the client uses the same device name (`-d`), the manager atSign is in `manager-atsigns`, and (behind strict ACLs) that the relay chosen with `-r` is reachable outbound from the router. |
+| Daemon runs but `sshnp` can't connect | Verify the client uses the same device name (`-d`), the manager atSign is in `access managers`, and (behind strict ACLs) that the relay chosen with `-r` is reachable outbound from the router. |
 | Re-enrolling a device | Delete the key file in `/etc/opt/noports/keys/`, revoke the old enrollment (`at_activate revoke`), and run the onboard script again. |
+| What config is sshnpd actually running with? | `cat /etc/opt/noports/sshnpd.yaml` — rendered by the agent from `/noports` on every commit. Don't edit it; change the config tree and commit instead. |
 
 Config changes take effect on `commit` — the agent restarts sshnpd with the
 new settings automatically. `set / noports admin-state disable` + commit
