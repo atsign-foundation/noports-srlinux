@@ -19,12 +19,27 @@ jobs:
         with:
           egress-policy: audit
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Fetch pinned sshnpd release binary
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version: "1.24"
+          cache-dependency-path: agent/go.sum
+      - name: Build noports-agent
+        working-directory: agent
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          go build -trimpath -ldflags "-s -w -X main.version=$VERSION" \
+            -o ../build/noports-agent .
+      - name: Fetch pinned sshnpd release binaries
         run: ./scripts/fetch-sshnpd.sh
       - name: Build deb with nFPM
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          make deb VERSION="$VERSION"
+          docker run --rm -e VERSION="$VERSION" -v $PWD:/tmp/pkg -w /tmp/pkg \
+            goreleaser/nfpm package --config nfpm.yaml --packager deb --target build/
       - name: Create release and upload deb
         env:
           GH_TOKEN: ${{ github.token }}

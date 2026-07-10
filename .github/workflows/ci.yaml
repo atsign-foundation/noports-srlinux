@@ -18,12 +18,21 @@ jobs:
         with:
           egress-policy: audit
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version: "1.24"
+          cache-dependency-path: agent/go.sum
       - name: shellcheck
-        run: shellcheck opt/sshnpd/run-sshnpd.sh scripts/*.sh
+        run: shellcheck opt/noports/*.sh scripts/*.sh
       - name: Validate YANG module
         run: |
           pip install pyang
-          pyang --strict yang/noports-sshnpd.yang
+          pyang --strict yang/noports.yang
+      - name: go vet + gofmt
+        working-directory: agent
+        run: |
+          go vet ./...
+          test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
 
   build:
     runs-on: ubuntu-latest
@@ -32,19 +41,38 @@ jobs:
         with:
           egress-policy: audit
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Fetch pinned sshnpd release binary
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version: "1.24"
+          cache-dependency-path: agent/go.sum
+      - name: Build noports-agent
+        working-directory: agent
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          go build -trimpath \
+            -ldflags "-s -w -X main.version=0.0.0-ci${{ github.run_number }}" \
+            -o ../build/noports-agent .
+      - name: Fetch pinned sshnpd release binaries
         run: ./scripts/fetch-sshnpd.sh
       - name: Build deb with nFPM
-        run: make deb VERSION=0.0.0-ci${{ github.run_number }}
+        run: |
+          docker run --rm -e VERSION=0.0.0-ci${{ github.run_number }} \
+            -v $PWD:/tmp/pkg -w /tmp/pkg \
+            goreleaser/nfpm package --config nfpm.yaml --packager deb --target build/
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: noports-srlinux-deb
           path: build/*.deb
           if-no-files-found: error
 
-  # Deploy a real SR Linux node in containerlab, install the deb and assert
-  # that app_mgr registers the sshnpd application. No atKeys are available in
-  # CI, so this proves packaging + registration, not the atProtocol session.
+  # Deploy a real SR Linux node, install the deb, configure /noports from the
+  # CLI and assert the NDK agent reacts: YANG loads, config round-trips, and
+  # the agent publishes state. No atKeys exist in CI, so the expected steady
+  # state is "awaiting-onboarding" — proving everything except the atProtocol
+  # session itself.
   smoke:
     needs: build
     runs-on: ubuntu-latest
@@ -75,46 +103,55 @@ jobs:
         run: |
           docker cp build/*.deb clab-noports-ci-srl1:/tmp/noports-srlinux.deb
           docker exec -u root clab-noports-ci-srl1 dpkg -i /tmp/noports-srlinux.deb
-      - name: Reload app_mgr and assert sshnpd is registered
+      - name: Reload app_mgr and assert the noports app is registered
         run: |
           docker exec clab-noports-ci-srl1 sr_cli 'tools system app-management application app_mgr reload'
           for i in $(seq 1 12); do
-            OUT=$(docker exec clab-noports-ci-srl1 sr_cli 'show system application sshnpd' 2>/dev/null || true)
+            OUT=$(docker exec clab-noports-ci-srl1 sr_cli 'show system application noports' 2>/dev/null || true)
             echo "$OUT"
-            if echo "$OUT" | grep -q sshnpd; then
-              echo "sshnpd registered with app_mgr"
+            if echo "$OUT" | grep -q noports; then
               exit 0
             fi
             sleep 5
           done
-          echo "sshnpd never appeared in app_mgr" >&2
-          docker exec clab-noports-ci-srl1 sh -c 'cat /var/log/srlinux/stdout/sshnpd*' 2>/dev/null || true
+          echo "noports app never appeared in app_mgr" >&2
+          docker exec clab-noports-ci-srl1 sh -c 'cat /var/log/srlinux/stdout/noports*' 2>/dev/null || true
           exit 1
-      # Registration alone would also pass with a broken launcher, so prove
-      # the risky parts explicitly:
+      - name: Configure /noports from the CLI
+        run: |
+          printf '%s\n' \
+            'enter candidate' \
+            'set / noports device-atsign @ci_device' \
+            'set / noports manager-atsigns [ @ci_manager ]' \
+            'set / noports device-name ci_router' \
+            'set / noports admin-state enable' \
+            'commit now' \
+            'quit' | docker exec -i clab-noports-ci-srl1 sr_cli
+      - name: Assert agent consumed config and published state
+        run: |
+          for i in $(seq 1 12); do
+            OUT=$(docker exec clab-noports-ci-srl1 sr_cli 'info from state / noports state' 2>/dev/null || true)
+            echo "$OUT"
+            if echo "$OUT" | grep -q "awaiting-onboarding"; then
+              echo "NDK config -> agent -> state round-trip verified"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "agent never published awaiting-onboarding state" >&2
+          docker exec clab-noports-ci-srl1 sh -c 'cat /var/log/srlinux/stdout/noports*' 2>/dev/null || true
+          exit 1
       - name: Assert packaged binaries execute inside the srbase-mgmt netns
         run: |
           for BIN in sshnpd at_activate; do
             OUT=$(docker exec -u root clab-noports-ci-srl1 \
               ip netns exec srbase-mgmt /usr/local/bin/$BIN --help 2>&1 || true)
-            echo "$OUT" | head -5
+            echo "$OUT" | head -3
             echo "$OUT" | grep -qi "atsign\|usage" || {
               echo "$BIN did not produce usage output in srbase-mgmt" >&2
               exit 1
             }
           done
-      - name: Assert app_mgr actually ran the launcher
-        run: |
-          # With no /etc/opt/sshnpd/sshnpd.env the launcher exits with a
-          # deterministic message; finding it in the app's stdout log proves
-          # the app_mgr -> run-sshnpd.sh wiring end to end.
-          LOG=$(docker exec clab-noports-ci-srl1 sh -c 'cat /var/log/srlinux/stdout/sshnpd*' 2>/dev/null || true)
-          echo "$LOG"
-          echo "$LOG" | grep -q "sshnpd.env not found" || {
-            echo "launcher error message not found in app stdout log" >&2
-            docker exec clab-noports-ci-srl1 ls /var/log/srlinux/stdout/ || true
-            exit 1
-          }
       - name: Destroy topology
         if: always()
         run: sudo containerlab destroy -t clab/ci.clab.yml || true

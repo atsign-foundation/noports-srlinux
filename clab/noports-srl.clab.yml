@@ -1,6 +1,8 @@
-# containerlab topology for testing NoPorts on SR Linux — no hardware needed.
+# containerlab topology for developing NoPorts on SR Linux — no hardware
+# needed.
 #
-#   containerlab deploy -t noports-srl.clab.yml
+#   make fetch agent            # stage binaries in build/
+#   make lab
 #   ssh admin@clab-noports-srl-srl1        (password: NokiaSrl1!)
 #
 # The SR Linux mgmt interface gets NAT'd internet access via the Docker
@@ -16,16 +18,17 @@ topology:
       image: ghcr.io/nokia/srlinux:latest
       binds:
         # Mount the repo's staged artifacts straight into the node for fast
-        # iteration (edit on host, `tools system app-management application
-        # sshnpd restart` on the node). For the deb workflow, drop the
-        # binds and `dpkg -i` the package instead.
-        - ../appmgr/sshnpd.yml:/etc/opt/srlinux/appmgr/sshnpd.yml:ro
-        - ../opt/sshnpd/run-sshnpd.sh:/opt/sshnpd/run-sshnpd.sh:ro
-        - ../opt/sshnpd/onboard-sshnpd.sh:/opt/sshnpd/onboard-sshnpd.sh:ro
+        # iteration (rebuild on host, `tools system app-management
+        # application noports restart` on the node). For the deb workflow,
+        # drop the binds and `dpkg -i` the package instead.
+        - ../appmgr/noports.yml:/etc/opt/srlinux/appmgr/noports.yml:ro
+        - ../yang:/opt/noports/yang:ro
+        - ../opt/noports/onboard-noports.sh:/opt/noports/onboard-noports.sh:ro
+        - ../build/noports-agent:/usr/local/bin/noports-agent:ro
         - ../build/sshnpd:/usr/local/bin/sshnpd:ro
         - ../build/at_activate:/usr/local/bin/at_activate:ro
-        # Local-only secrets dir (gitignored): sshnpd.env + atKeys file.
-        - ./secrets:/etc/opt/sshnpd
+        # Local-only secrets dir (gitignored): APKAM keys land here.
+        - ./secrets:/etc/opt/noports
 
     # A plain Linux box to run the sshnp client from, simulating the
     # operator's machine. Install sshnp + client atKeys here to test the

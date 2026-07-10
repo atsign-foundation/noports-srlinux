@@ -1,0 +1,18 @@
+# App Manager configuration for the NoPorts NDK agent on Nokia SR Linux.
+#
+# Installed to /etc/opt/srlinux/appmgr/noports.yml. The agent registers with
+# the NDK, receives /noports configuration as JSON on every commit, and
+# supervises the sshnpd daemon (spawned inside the srbase-mgmt namespace).
+noports:
+  path: /usr/local/bin
+  launch-command: noports-agent
+  version-command: noports-agent --version
+  search-command: noports-agent
+  run-as-user: root
+  failure-action: "wait=10"
+  config-delivery-format: json
+  yang-modules:
+    names:
+      - noports
+    source-directories:
+      - /opt/noports/yang
