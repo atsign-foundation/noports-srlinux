@@ -1,0 +1,12 @@
+# Minimal topology used by the CI smoke test: a single SR Linux node with no
+# bind mounts. CI copies the built .deb in with `docker cp`, installs it,
+# reloads app_mgr and asserts the sshnpd app is registered.
+name: noports-ci
+
+topology:
+  nodes:
+    srl1:
+      kind: nokia_srlinux
+      image: ghcr.io/nokia/srlinux:latest
+
+  links: []

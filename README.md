@@ -4,75 +4,123 @@
 <a href="https://atsign.com#gh-dark-mode-only">
    <img width=250px src="https://atsign.com/wp-content/uploads/2023/08/atsign-logo-horizontal-reverse2022-Color.svg#gh-dark-mode-only" alt="The Atsign Foundation"></a></h1>
 
-# Sample README
+# NoPorts for Nokia SR Linux
 
 Open with intent - we welcome contributions - we want pull requests and to
 hear about issues.
 
+Run the [NoPorts](https://docs.noports.com) device daemon (`sshnpd`) on a
+Nokia [SR Linux](https://learn.srlinux.dev) router as a first-class,
+`app_mgr`-managed application, giving operators SSH — and, via `npt`,
+gNMI/JSON-RPC — access to the router with **no inbound listening ports** on
+the management plane.
+
 ## Who is this for?
 
-The README should be addressed to somebody who's never seen this before.
-But also don't assume that they're a novice.
+### Network operators
 
-### Code user
+You want to reach your SR Linux routers without exposing SSH or gNMI on the
+management VRF. Install the `.deb` from the
+[releases page](https://github.com/atsign-foundation/noports-srlinux/releases)
+— see [Installation](#installation) below. You will need NoPorts atSigns for
+your devices; start at [noports.com](https://noports.com).
 
-Does this repo publish to [pub.dev](https://pub.dev) or similar?
-In which case the code user just needs a pointer there - e.g. [at_client on pub.dev](https://pub.dev/packages/at_client)
+### Contributors
 
-### Contributor
+[CONTRIBUTING.md](CONTRIBUTING.md) has the general guidance. Everything in
+this repo can be developed and tested without router hardware using the free
+SR Linux container image and [containerlab](https://containerlab.dev) — see
+[Development](#development).
 
-This is the person who we want working with us here.
-[CONTRIBUTING.md](CONTRIBUTING.md) is going to have the detailed guidance
-on how to setup their tools, tests and how to make a pull request.
+## How it works
 
-## Why, What, How?
+SR Linux's Application Manager (`app_mgr`) can supervise any Linux
+executable — the full NDK gRPC machinery is only needed for deep
+integrations (RIB/FIB access, custom telemetry). NoPorts needs none of that,
+so the integration is deliberately thin:
 
-### Why?
+| Piece | On-router path | Purpose |
+|---|---|---|
+| `sshnpd` binary | `/usr/local/bin/sshnpd` | Stock NoPorts release binary (x86_64) |
+| [`appmgr/sshnpd.yml`](appmgr/sshnpd.yml) | `/etc/opt/srlinux/appmgr/sshnpd.yml` | Registers the app with `app_mgr` |
+| [`opt/sshnpd/run-sshnpd.sh`](opt/sshnpd/run-sshnpd.sh) | `/opt/sshnpd/run-sshnpd.sh` | Launcher: loads env, enters mgmt netns |
+| [`etc/sshnpd.env.example`](etc/sshnpd.env.example) | `/etc/opt/sshnpd/sshnpd.env` | Per-device settings (atSigns, device name) |
+| atKeys file | `/etc/opt/sshnpd/keys/` | Device identity (never commit these!) |
 
-What is the purpose of this project?
+The one SR Linux-specific trick: the management VRF and the local `sshd`
+live in the `srbase-mgmt` network namespace, while `app_mgr` launches apps
+in the default namespace. The launcher therefore wraps the daemon in
+`ip netns exec srbase-mgmt ...` so it can reach the atDirectory/atServers
+outbound *and* connect to the local sshd.
 
-### What?
+Since release 24.3.1 SR Linux is Debian-based, so the deliverable is a
+single `.deb` built with [nFPM](https://nfpm.goreleaser.com/). The pinned
+sshnpd release lives in [SSHNPD_VERSION](SSHNPD_VERSION) and is bumped
+automatically by CI when NoPorts publishes a new release.
 
-What is needed to get the project and its dependencies installed?
+## Installation
 
-### How?
+Grab the `.deb` from the
+[releases page](https://github.com/atsign-foundation/noports-srlinux/releases)
+(or build it yourself: `make deb`), then on the router:
 
-How does this work? How is this used to fulfil its intended purpose?
+```bash
+# from the SR Linux CLI, drop to the Linux shell with `bash`
+sudo dpkg -i noports-srlinux_*.deb
+sudo cp /etc/opt/sshnpd/sshnpd.env.example /etc/opt/sshnpd/sshnpd.env
+sudo vi /etc/opt/sshnpd/sshnpd.env    # set device/manager atSigns, device name
+# copy your @device_key.atKeys into /etc/opt/sshnpd/keys/
+```
 
-## Checklist
+Register and start from the SR Linux CLI:
 
-### Writing
+```text
+tools system app-management application app_mgr reload
+show system application sshnpd
+tools system app-management application sshnpd start
+```
 
-Does the writing flow, with proper grammar and correct spelling?
+Connect from anywhere:
 
-### Links
+```bash
+sshnp -f @manager -t @mydevice -d srl-router-1 -u admin
+# or tunnel gNMI without SSH:
+npt -f @manager -t @mydevice -d srl-router-1 -r localhost -p 57400 -l 57400
+```
 
-Are the links to external resources correct?
-Are the links to other parts of the project correct
-(beware stuff carried over from previous repos where the
-project might have lived during earlier development)?
+## Development
 
-### Description
+No hardware needed — SR Linux ships as a free public container image:
 
-Has the Description field been filled out?
+```bash
+make fetch                       # stage the pinned sshnpd binary in build/
+make deb                         # build the .deb (Docker + nFPM)
+mkdir -p clab/secrets            # put sshnpd.env + atKeys here (gitignored)
+make lab                         # containerlab deploy (Linux host)
+ssh admin@clab-noports-srl-srl1  # password: NokiaSrl1!
+```
 
-### Acknowledgement/Attribution
+The dev topology ([clab/noports-srl.clab.yml](clab/noports-srl.clab.yml))
+bind-mounts this repo's artifacts into the node for fast iteration; CI uses
+the minimal [clab/ci.clab.yml](clab/ci.clab.yml) and installs the built deb
+instead.
 
-Have we correctly acknowledged the work of others (and their Trademarks etc.)
-where appropriate (per the conditions of their LICENSE?
+`make lint` runs shellcheck and pyang locally (matching CI).
 
-### LICENSE
+## Roadmap
 
-Which LICENSE are we using?  
-Is the LICENSE(.md) file present?  
-Does it have the correct dates, legal entities etc.?
+- **Phase 1 (current):** sshnpd as an `app_mgr`-managed app, env-file
+  configured, packaged as a deb, containerlab smoke test in CI.
+- **Phase 2:** wire up [yang/noports-sshnpd.yang](yang/noports-sshnpd.yang)
+  (+ `wait-for-config`) so atSigns/device name are set from the SR Linux
+  CLI/gNMI and stored in the router config; publish `oper-state` into `show`
+  output via a thin [Python NDK agent](https://github.com/nokia/srlinux-ndk-py);
+  submit to the [NDK apps catalog](https://learn.srlinux.dev/ndk/apps/).
+- **Phase 3:** APKAM enrollment for fleet onboarding (no atKeys files copied
+  to routers); `npt` port policy for gNMI/JSON-RPC tunneling; arm64 package.
 
 ## Maintainers
 
-Who created this?  
-
-Do they have complete GitHub profiles?  
-
-How can they be contacted?  
-
-Who is going to respond to pull requests?  
+Created by Atsign. Original author:
+[Colin Constable](https://github.com/cconstab) ([@colin](https://atsign.com)).
+Issues and pull requests are welcome — they are triaged weekly.

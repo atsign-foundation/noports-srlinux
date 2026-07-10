@@ -1,0 +1,53 @@
+# nFPM package definition: bundles sshnpd + app_mgr config into a single
+# .deb for SR Linux (Debian-based since release 24.3.1).
+#
+# VERSION is substituted from the environment (set by the Makefile locally
+# and by the release workflow from the git tag).
+#
+# Build (after scripts/fetch-sshnpd.sh has staged the binary in build/):
+#   make deb
+# Install on the router:
+#   sudo dpkg -i noports-srlinux_*.deb
+name: noports-srlinux
+arch: amd64
+platform: linux
+version: ${VERSION}
+maintainer: Atsign <info@atsign.com>
+description: >
+  NoPorts sshnpd daemon packaged as a Nokia SR Linux app_mgr application.
+  Provides SSH (and npt port tunneling, e.g. gNMI) access to the router
+  with no inbound listening ports.
+vendor: Atsign
+homepage: https://docs.noports.com
+license: BSD-3-Clause
+
+contents:
+  - src: build/sshnpd
+    dst: /usr/local/bin/sshnpd
+    file_info:
+      mode: 0755
+  - src: opt/sshnpd/run-sshnpd.sh
+    dst: /opt/sshnpd/run-sshnpd.sh
+    file_info:
+      mode: 0755
+  - src: appmgr/sshnpd.yml
+    dst: /etc/opt/srlinux/appmgr/sshnpd.yml
+    type: config
+  - src: etc/sshnpd.env.example
+    dst: /etc/opt/sshnpd/sshnpd.env.example
+    type: config
+  - src: yang/noports-sshnpd.yang
+    dst: /opt/sshnpd/yang/noports-sshnpd.yang
+  # Keys directory (operator drops the atKeys file in here post-install).
+  - dst: /etc/opt/sshnpd/keys
+    type: dir
+    file_info:
+      mode: 0700
+  # Persistent runtime storage used as $HOME by sshnpd.
+  - dst: /var/opt/sshnpd
+    type: dir
+    file_info:
+      mode: 0700
+
+scripts:
+  postinstall: scripts/postinstall.sh

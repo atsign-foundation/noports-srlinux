@@ -1,0 +1,31 @@
+
+# App Manager configuration for NoPorts sshnpd on Nokia SR Linux.
+#
+# Install to: /etc/opt/srlinux/appmgr/sshnpd.yml
+# Then run:   tools system app-management application app_mgr reload
+#
+# sshnpd is launched via a wrapper script so that:
+#   - runtime settings live in /etc/opt/sshnpd/sshnpd.env (no yml edits needed)
+#   - the process is placed in the srbase-mgmt network namespace, where both
+#     the management VRF (outbound internet to the atDirectory/atServer) and
+#     the local sshd live.
+sshnpd:
+  path: /opt/sshnpd
+  launch-command: bash /opt/sshnpd/run-sshnpd.sh
+  # app_mgr looks for a running process whose name starts with this prefix;
+  # the wrapper ends with `exec .../sshnpd` so the binary is what's running.
+  search-command: /usr/local/bin/sshnpd
+  run-as-user: root
+  # Restart with backoff rather than taking any drastic action on crash.
+  failure-action: "wait=10"
+  # Start late; sshnpd depends on mgmt networking being up.
+  start-order: 250
+  # --- Phase 2: uncomment once the YANG module is installed to make sshnpd
+  # --- configurable from the SR Linux CLI/gNMI (see ../yang/).
+  # config-delivery-format: json
+  # wait-for-config: Yes
+  # yang-modules:
+  #   names:
+  #     - noports-sshnpd
+  #   source-directories:
+  #     - /opt/sshnpd/yang

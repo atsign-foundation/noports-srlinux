@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [trunk]
+  pull_request:
+    branches: [trunk]
+  workflow_dispatch:
+
+permissions: # added using https://github.com/step-security/secure-workflows
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc # v2.15.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: shellcheck
+        run: shellcheck opt/sshnpd/run-sshnpd.sh scripts/*.sh
+      - name: Validate YANG module
+        run: |
+          pip install pyang
+          pyang --strict yang/noports-sshnpd.yang
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc # v2.15.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Fetch pinned sshnpd release binary
+        run: ./scripts/fetch-sshnpd.sh
+      - name: Build deb with nFPM
+        run: make deb VERSION=0.0.0-ci${{ github.run_number }}
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: noports-srlinux-deb
+          path: build/*.deb
+          if-no-files-found: error
+
+  # Deploy a real SR Linux node in containerlab, install the deb and assert
+  # that app_mgr registers the sshnpd application. No atKeys are available in
+  # CI, so this proves packaging + registration, not the atProtocol session.
+  smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc # v2.15.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: noports-srlinux-deb
+          path: build
+      - name: Install containerlab
+        run: bash -c "$(curl -sL https://get.containerlab.dev)"
+      - name: Deploy SR Linux node
+        run: sudo containerlab deploy -t clab/ci.clab.yml
+      - name: Wait for SR Linux CLI
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec clab-noports-ci-srl1 sr_cli 'show version' >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "SR Linux CLI did not become ready" >&2
+          exit 1
+      - name: Install the deb on the node
+        run: |
+          docker cp build/*.deb clab-noports-ci-srl1:/tmp/noports-srlinux.deb
+          docker exec -u root clab-noports-ci-srl1 dpkg -i /tmp/noports-srlinux.deb
+      - name: Reload app_mgr and assert sshnpd is registered
+        run: |
+          docker exec clab-noports-ci-srl1 sr_cli 'tools system app-management application app_mgr reload'
+          for i in $(seq 1 12); do
+            OUT=$(docker exec clab-noports-ci-srl1 sr_cli 'show system application sshnpd' 2>/dev/null || true)
+            echo "$OUT"
+            if echo "$OUT" | grep -q sshnpd; then
+              echo "sshnpd registered with app_mgr"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "sshnpd never appeared in app_mgr" >&2
+          docker exec clab-noports-ci-srl1 cat /var/log/srlinux/stdout/sshnpd.log 2>/dev/null || true
+          exit 1
+      - name: Destroy topology
+        if: always()
+        run: sudo containerlab destroy -t clab/ci.clab.yml || true
