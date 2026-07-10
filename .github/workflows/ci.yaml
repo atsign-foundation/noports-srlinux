@@ -88,8 +88,31 @@ jobs:
             sleep 5
           done
           echo "sshnpd never appeared in app_mgr" >&2
-          docker exec clab-noports-ci-srl1 cat /var/log/srlinux/stdout/sshnpd.log 2>/dev/null || true
+          docker exec clab-noports-ci-srl1 sh -c 'cat /var/log/srlinux/stdout/sshnpd*' 2>/dev/null || true
           exit 1
+      # Registration alone would also pass with a broken launcher, so prove
+      # the risky parts explicitly:
+      - name: Assert sshnpd binary executes inside the srbase-mgmt netns
+        run: |
+          OUT=$(docker exec -u root clab-noports-ci-srl1 \
+            ip netns exec srbase-mgmt /usr/local/bin/sshnpd --help 2>&1 || true)
+          echo "$OUT"
+          echo "$OUT" | grep -qi "atsign\|usage" || {
+            echo "sshnpd binary did not produce usage output in srbase-mgmt" >&2
+            exit 1
+          }
+      - name: Assert app_mgr actually ran the launcher
+        run: |
+          # With no /etc/opt/sshnpd/sshnpd.env the launcher exits with a
+          # deterministic message; finding it in the app's stdout log proves
+          # the app_mgr -> run-sshnpd.sh wiring end to end.
+          LOG=$(docker exec clab-noports-ci-srl1 sh -c 'cat /var/log/srlinux/stdout/sshnpd*' 2>/dev/null || true)
+          echo "$LOG"
+          echo "$LOG" | grep -q "sshnpd.env not found" || {
+            echo "launcher error message not found in app stdout log" >&2
+            docker exec clab-noports-ci-srl1 ls /var/log/srlinux/stdout/ || true
+            exit 1
+          }
       - name: Destroy topology
         if: always()
         run: sudo containerlab destroy -t clab/ci.clab.yml || true
