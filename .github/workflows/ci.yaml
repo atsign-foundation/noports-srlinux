@@ -57,6 +57,20 @@ jobs:
             -o ../build/noports-agent .
       - name: Fetch pinned sshnpd release binaries
         run: ./scripts/fetch-sshnpd.sh
+      - name: Check upstream config schema for drift
+        run: |
+          # The agent renders sshnpd.yaml from the YANG config; if NoPorts
+          # changes the config file schema, this diff turns the (bump) PR
+          # red with the exact change. See upstream/README.md for the
+          # update procedure.
+          if ! diff -u upstream/sshnpd.yaml.example build/sshnp/config/sshnpd.yaml; then
+            echo "" >&2
+            echo "sshnpd.yaml schema changed upstream!" >&2
+            echo "Review the diff, update yang/noports.yang and agent/app/render.go," >&2
+            echo "then refresh the snapshot: cp build/sshnp/config/sshnpd.yaml upstream/sshnpd.yaml.example" >&2
+            exit 1
+          fi
+          echo "upstream config schema unchanged"
       - name: Build deb with nFPM
         run: |
           docker run --rm -e VERSION=0.0.0-ci${{ github.run_number }} \
