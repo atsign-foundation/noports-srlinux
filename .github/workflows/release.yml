@@ -40,16 +40,25 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           docker run --rm -e VERSION="$VERSION" -v $PWD:/tmp/pkg -w /tmp/pkg \
             goreleaser/nfpm package --config nfpm.yaml --packager deb --target build/
-      - name: Create release and upload deb
+      - name: Create release (or attach deb to a UI-created one)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" build/*.deb \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes \
-            --notes "Packages sshnpd $(cat SSHNPD_VERSION) for Nokia SR Linux." \
-            --latest \
-          || gh release upload "$GITHUB_REF_NAME" build/*.deb --clobber
-          # If the release pre-existed (created via the UI, possibly flagged
-          # pre-release, which blocks "latest"), normalize the flags.
-          gh release edit "$GITHUB_REF_NAME" --prerelease=false --latest
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            # Release was created in the GitHub UI: respect its
+            # pre-release/latest flags as chosen there; just attach the deb.
+            gh release upload "$GITHUB_REF_NAME" build/*.deb --clobber
+          else
+            # Bare tag push: create the release here. Semver pre-release
+            # tags (e.g. v0.2.0-rc1) become pre-releases; plain tags become
+            # the latest release.
+            case "$GITHUB_REF_NAME" in
+              *-*) FLAG="--prerelease" ;;
+              *)   FLAG="--latest" ;;
+            esac
+            gh release create "$GITHUB_REF_NAME" build/*.deb \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes \
+              --notes "Packages sshnpd $(cat SSHNPD_VERSION) for Nokia SR Linux." \
+              "$FLAG"
+          fi
