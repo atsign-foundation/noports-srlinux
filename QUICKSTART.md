@@ -101,6 +101,52 @@ sshnp -f @manager -r @rv_oc -t @mydevice -d srl-router-1 -u admin \
   --root-domain "proxy:proxy0001.atsign.org:443"
 ```
 
+## Path C: standalone SR Linux in plain Docker (no containerlab)
+
+A single SR Linux node in plain Docker is enough to exercise the whole
+integration. Two things containerlab normally does for you must happen
+another way:
+
+1. **Config must be present at boot** — SR Linux only adopts the
+   container's `eth0` as `mgmt0` during startup, so runtime commits can't
+   bootstrap management networking. The repo ships
+   [docker/standalone-config.json](docker/standalone-config.json), which
+   enables `mgmt0` (DHCP), DNS, the **NDK server** and the
+   **`insecure-mgmt` gRPC server with its unix socket** — the two services
+   the noports agent depends on (`sr_sdk_service_manager` for NDK
+   registration, `sr_grpc_server_insecure-mgmt` for config retrieval).
+2. **The host must run real Linux.** On macOS, Docker Desktop's LinuxKit
+   kernel breaks SR Linux's management-namespace plumbing
+   (`net_inst_mgr` crashes creating the mgmt gateway veth — observed on
+   SR Linux 25.7.1 and 26.3.3). Use [OrbStack](https://orbstack.dev) or a
+   Linux VM instead; any x86_64/arm64 Linux host with Docker works.
+
+```bash
+# 1. build the deb for the host architecture (arm64 shown; default amd64)
+make fetch agent deb ARCH=arm64
+
+# 2. boot SR Linux with the bootstrap config (image is multi-arch)
+cp docker/standalone-config.json /tmp/srl-config.json
+docker run -t -d --rm --privileged -u 0:0 -e SRLINUX=1 \
+  -v /tmp/srl-config.json:/etc/opt/srlinux/config.json \
+  --name srl ghcr.io/nokia/srlinux:latest \
+  sudo -E bash -c 'touch /.dockerenv && /opt/srlinux/bin/sr_linux'
+
+# 3. install (postinstall reloads app_mgr; startup config replays cleanly)
+docker cp build/noports-srlinux_*_*.deb srl:/tmp/noports.deb
+docker exec -u root srl dpkg -i /tmp/noports.deb
+
+# 4. configure from the CLI as usual, then persist
+docker exec -it srl sr_cli
+#   enter candidate / set / noports ... / commit now / save startup
+
+# 5. onboard (APKAM) and connect, as in Path A
+```
+
+Note: `save startup` after configuring — an `app_mgr reload` replays the
+*startup* config, so unsaved running config is lost when apps are
+(re)installed.
+
 ## Troubleshooting
 
 | Symptom | Check |

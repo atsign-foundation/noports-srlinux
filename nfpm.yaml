@@ -9,7 +9,8 @@
 # Install on the router:
 #   sudo dpkg -i noports-srlinux_*.deb
 name: noports-srlinux
-arch: amd64
+# amd64 or arm64; set by the Makefile/workflows (ARCH env var)
+arch: ${ARCH}
 platform: linux
 version: ${VERSION}
 maintainer: Atsign <info@atsign.com>
