@@ -73,7 +73,7 @@ jobs:
           echo "upstream config schema unchanged"
       - name: Build deb with nFPM
         run: |
-          docker run --rm -e VERSION=0.0.0-ci${{ github.run_number }} \
+          docker run --rm -e VERSION=0.0.0-ci${{ github.run_number }} -e ARCH=amd64 \
             -v $PWD:/tmp/pkg -w /tmp/pkg \
             goreleaser/nfpm package --config nfpm.yaml --packager deb --target build/
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
