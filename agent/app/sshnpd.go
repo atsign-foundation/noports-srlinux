@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"syscall"
 	"time"
 )
 
@@ -43,6 +44,17 @@ func (a *App) supervise(ctx context.Context, cfg *Config, done chan struct{}) {
 		if err := os.MkdirAll(sshnpdHomeDir, 0o700); err != nil {
 			a.logger.Error().Err(err).Msg("failed to create sshnpd home dir")
 		}
+		// sshnpd writes session (twinned/ephemeral) public keys to
+		// $HOME/.ssh/authorized_keys and fails the session if it is absent.
+		if err := os.MkdirAll(sshnpdHomeDir+"/.ssh", 0o700); err != nil {
+			a.logger.Error().Err(err).Msg("failed to create .ssh dir")
+		}
+		if f, err := os.OpenFile(sshnpdHomeDir+"/.ssh/authorized_keys",
+			os.O_CREATE, 0o600); err != nil {
+			a.logger.Error().Err(err).Msg("failed to ensure authorized_keys")
+		} else {
+			f.Close()
+		}
 
 		cmd := exec.CommandContext(ctx, "ip", args...)
 		// sshnpd keeps local storage under $HOME; give it a persistent home.
@@ -52,6 +64,13 @@ func (a *App) supervise(ctx context.Context, cfg *Config, done chan struct{}) {
 		// app_mgr collects our stdout/stderr; pass the child's through.
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
+		// Kill the whole process group on epoch cancel: sshnpd (and any srv
+		// session children) must not outlive the agent's supervision — an
+		// orphaned sshnpd holds the storage lock and wedges every restart.
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		cmd.Cancel = func() error {
+			return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
 
 		if err := cmd.Start(); err != nil {
 			a.logger.Error().Err(err).Msg("failed to start sshnpd")
