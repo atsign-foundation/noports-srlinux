@@ -125,10 +125,14 @@ another way:
 # 1. build the deb for the host architecture (arm64 shown; default amd64)
 make fetch agent deb ARCH=arm64
 
-# 2. boot SR Linux with the bootstrap config (image is multi-arch)
-cp docker/standalone-config.json /tmp/srl-config.json
+# 2. boot SR Linux with the bootstrap config (image is multi-arch).
+# Mount a DIRECTORY over /etc/opt/srlinux (containerlab does the same):
+# a single-file mount of config.json makes `save startup` fail, because
+# SR Linux saves by atomically renaming a temp file over config.json.
+mkdir -p /tmp/srl-standalone
+cp docker/standalone-config.json /tmp/srl-standalone/config.json
 docker run -t -d --rm --privileged -u 0:0 -e SRLINUX=1 \
-  -v /tmp/srl-config.json:/etc/opt/srlinux/config.json \
+  -v /tmp/srl-standalone:/etc/opt/srlinux \
   --name srl ghcr.io/nokia/srlinux:latest \
   sudo -E bash -c 'touch /.dockerenv && /opt/srlinux/bin/sr_linux'
 
