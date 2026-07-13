@@ -94,10 +94,12 @@ Set proxy mode **before** onboarding, so enrollment traffic uses it too:
 set / noports root-server proxy:proxy0001.atsign.org:443
 ```
 
-and connect with the matching client flags:
+and connect with the matching client flags — `--443` keeps the session
+data path (relay) on port 443 too:
 
 ```bash
 sshnp -f @manager -r @rv_oc -t @mydevice -d srl-router-1 -u admin \
+  --443 --relay-auth-mode escr \
   --root-domain "proxy:proxy0001.atsign.org:443"
 ```
 
@@ -125,10 +127,14 @@ another way:
 # 1. build the deb for the host architecture (arm64 shown; default amd64)
 make fetch agent deb ARCH=arm64
 
-# 2. boot SR Linux with the bootstrap config (image is multi-arch)
-cp docker/standalone-config.json /tmp/srl-config.json
+# 2. boot SR Linux with the bootstrap config (image is multi-arch).
+# Mount a DIRECTORY over /etc/opt/srlinux (containerlab does the same):
+# a single-file mount of config.json makes `save startup` fail, because
+# SR Linux saves by atomically renaming a temp file over config.json.
+mkdir -p /tmp/srl-standalone
+cp docker/standalone-config.json /tmp/srl-standalone/config.json
 docker run -t -d --rm --privileged -u 0:0 -e SRLINUX=1 \
-  -v /tmp/srl-config.json:/etc/opt/srlinux/config.json \
+  -v /tmp/srl-standalone:/etc/opt/srlinux \
   --name srl ghcr.io/nokia/srlinux:latest \
   sudo -E bash -c 'touch /.dockerenv && /opt/srlinux/bin/sr_linux'
 
@@ -136,11 +142,17 @@ docker run -t -d --rm --privileged -u 0:0 -e SRLINUX=1 \
 docker cp build/noports-srlinux_*_*.deb srl:/tmp/noports.deb
 docker exec -u root srl dpkg -i /tmp/noports.deb
 
-# 4. configure from the CLI as usual, then persist
+# 4. give the mgmt namespace a default route — docker networks don't
+#    provide one via DHCP, and SR Linux static routes are not exported
+#    to the kernel namespace that sshnpd/at_activate route through
+GW=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')
+docker exec srl ip netns exec srbase-mgmt ip route add default via "$GW"
+
+# 5. configure from the CLI as usual, then persist
 docker exec -it srl sr_cli
 #   enter candidate / set / noports ... / commit now / save startup
 
-# 5. onboard (APKAM) and connect, as in Path A
+# 6. onboard (APKAM) and connect, as in Path A
 ```
 
 Note: `save startup` after configuring — an `app_mgr reload` replays the
@@ -158,6 +170,8 @@ Note: `save startup` after configuring — an `app_mgr reload` replays the
 | Onboard script hangs then fails | Enrollment wasn't approved in time — check from your machine with `at_activate list -a @mydevice -s pending`, approve, and re-run. If it never reaches the atServer, test egress: `ip netns exec srbase-mgmt curl -v https://proxy0001.atsign.org:443` and use proxy mode. |
 | Name resolution fails on the node | DNS in the `srbase-mgmt` namespace is separate from the default namespace — check `/etc/resolv.conf` and the mgmt network-instance DNS config. |
 | Daemon runs but `sshnp` can't connect | Verify the client uses the same device name (`-d`), the manager atSign is in `access managers`, and (behind strict ACLs) that the relay chosen with `-r` is reachable outbound from the router. |
+| Session times out after "Waiting for response from the device daemon" | The daemon log shows srv dialing the relay on a random high port and hitting `TimeoutException` — egress blocks it. Probe from the router: `ip netns exec srbase-mgmt bash -c 'echo > /dev/tcp/portquiz.net/34137'`. Fix: add `--443` (and `--relay-auth-mode escr`) to the client command to keep the relay data path on 443. |
+| Enrollment hangs at "submitting enrollment request" | Control-plane egress is blocked (atDirectory port 64 / atServer high ports). Set `root-server proxy:proxy0001.atsign.org:443` **before** enrolling. |
 | Re-enrolling a device | Delete the key file in `/etc/opt/noports/keys/`, revoke the old enrollment (`at_activate revoke`), and run the onboard script again. |
 | What config is sshnpd actually running with? | `cat /etc/opt/noports/sshnpd.yaml` — rendered by the agent from `/noports` on every commit. Don't edit it; change the config tree and commit instead. |
 

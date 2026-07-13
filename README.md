@@ -169,18 +169,23 @@ ACLs. The `proxy:` root-server form skips the directory lookup and sends
 set / noports root-server proxy:proxy0001.atsign.org:443
 ```
 
-Both the daemon and APKAM enrollment honor it. Clients use the equivalent
-flag, picking a relay with `-r`:
+Both the daemon and APKAM enrollment honor it. The session data path is a
+separate outbound connection from the router to the relay, which normally
+uses a random high port per session — on a 443-only network, ask the relay
+for port 443 with the client's `--443` flag. The complete client command
+for fully restricted egress (verified end-to-end):
 
 ```bash
-sshnp -f @manager -r @rv_oc -t @mydevice -d srl-router-1 \
+sshnp -f @manager -r @rv_oc -t @mydevice -d srl-router-1 -u admin \
+  --443 --relay-auth-mode escr \
   --root-domain "proxy:proxy0001.atsign.org:443"
 ```
 
-Note: the proxy covers atProtocol (control-plane) traffic. The session data
-path is a separate outbound connection from the router to the relay chosen
-by the client (`-r`), so a 443-only egress policy also needs a relay
-reachable on 443.
+Symptoms when egress is the problem: enrollment hangs at "submitting
+enrollment request" (control plane, fix with `root-server proxy:...`);
+sessions time out after "Waiting for response from the device daemon" with
+`TimeoutException` in the daemon log as srv dials a high port (data plane,
+fix with `--443`).
 
 ## Fleet-scale access control: policy atSigns
 
