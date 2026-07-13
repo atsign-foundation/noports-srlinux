@@ -38,6 +38,12 @@ contents:
     dst: /usr/local/bin/at_activate
     file_info:
       mode: 0755
+  # Relay data-plane client: sshnpd spawns srv per session; without it
+  # session setup fails with "Unable to locate srv binary".
+  - src: build/srv
+    dst: /usr/local/bin/srv
+    file_info:
+      mode: 0755
   - src: opt/noports/onboard-noports.sh
     dst: /opt/noports/onboard-noports.sh
     file_info:

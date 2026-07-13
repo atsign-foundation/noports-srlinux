@@ -68,6 +68,7 @@ restarting it with backoff if it exits, and publishing
 | `noports-agent` | `/usr/local/bin/noports-agent` | NDK agent: config → sshnpd lifecycle → state |
 | `sshnpd` | `/usr/local/bin/sshnpd` | Stock NoPorts release binary (x86_64) |
 | `at_activate` | `/usr/local/bin/at_activate` | APKAM enrollment (cuts keys on the router) |
+| `srv` | `/usr/local/bin/srv` | Relay data-plane client, spawned by sshnpd per session |
 | [`appmgr/noports.yml`](appmgr/noports.yml) | `/etc/opt/srlinux/appmgr/noports.yml` | Registers the agent with `app_mgr` |
 | [`yang/noports.yang`](yang/noports.yang) | `/opt/noports/yang/` | Models `/noports` config + state |
 | [`onboard-noports.sh`](opt/noports/onboard-noports.sh) | `/opt/noports/onboard-noports.sh` | One-time APKAM device enrollment |

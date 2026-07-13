@@ -185,11 +185,11 @@ jobs:
           echo "CLI config -> rendered NoPorts yaml verified"
       - name: Assert packaged binaries execute inside the srbase-mgmt netns
         run: |
-          for BIN in sshnpd at_activate; do
+          for BIN in sshnpd at_activate srv; do
             OUT=$(docker exec -u root clab-noports-ci-srl1 \
               ip netns exec srbase-mgmt /usr/local/bin/$BIN --help 2>&1 || true)
             echo "$OUT" | head -3
-            echo "$OUT" | grep -qi "atsign\|usage" || {
+            echo "$OUT" | grep -qiE "atsign|usage|rvd" || {
               echo "$BIN did not produce usage output in srbase-mgmt" >&2
               exit 1
             }
