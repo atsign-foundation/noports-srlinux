@@ -6,6 +6,8 @@
 
 # NoPorts for Nokia SR Linux
 
+[![NDK App Catalog](https://img.shields.io/badge/SR%20Linux%20NDK-App%20Catalog-005AFF)](https://learn.srlinux.dev/ndk/apps/noports/)
+
 Open with intent - we welcome contributions - we want pull requests and to
 hear about issues.
 
@@ -16,6 +18,10 @@ CLI/gNMI config tree, supervised by an
 into `info from state` — and giving operators SSH (plus, via `npt`,
 gNMI/JSON-RPC) access to the router with **no inbound listening ports** on
 the management plane.
+
+NoPorts is listed in the official
+**[SR Linux NDK App Catalog](https://learn.srlinux.dev/ndk/apps/noports/)**
+on Nokia's learn.srlinux.dev.
 
 ```text
 --{ running }--[  ]--
@@ -245,15 +251,14 @@ checked with `go vet` and `gofmt`.
 
 - **Done:** NDK agent with CLI/gNMI config and state, full sshnpd.yaml
   config surface (access/device/ssh/runtime) rendered from the config tree,
-  APKAM on-router enrollment, proxy-mode (443-only) egress, deb packaging,
+  APKAM on-router enrollment, end-to-end session validated through
+  443-only egress (proxy mode + `--443` relay), amd64+arm64 deb packaging,
   containerlab smoke test in CI, automated upstream sshnpd bumps with
-  config-schema drift detection ([upstream/](upstream/README.md)).
-- **Next:** hardware validation (7220/7250) and an end-to-end lab guide with
-  real atSigns; submission to the
-  [NDK apps catalog](https://learn.srlinux.dev/ndk/apps/).
+  config-schema drift detection ([upstream/](upstream/README.md)), listed
+  in the [NDK App Catalog](https://learn.srlinux.dev/ndk/apps/noports/).
+- **Next:** hardware validation (7220/7250).
 - **Later:** fleet onboarding at scale (SPP passcodes + `at_activate auto`
-  approval); richer state (session counters, last-seen); arm64 package;
-  relay-on-443 guidance for fully locked-down egress.
+  approval); richer state (session counters, last-seen).
 
 ## Maintainers
 
