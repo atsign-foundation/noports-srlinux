@@ -20,7 +20,7 @@ save startup        # persist across reboot and app_mgr reload
 | Command | Type / values | Default | Effect |
 |---|---|---|---|
 | `set / noports admin-state <enable\|disable>` | enumeration | `disable` | Master switch. `enable` requires `device-atsign`, `device name`, and at least one of `access managers` / `access policy`. `disable` stops sshnpd. |
-| `set / noports device-atsign @<atsign>` | string, must start `@` | — | The atSign identifying this router (its identity on the atProtocol). |
+| `set / noports device-atsign @<atsign>` | string, must start `@` | — | The Atsign identifying this router (its identity on the atProtocol). |
 | `set / noports root-server <host[:port]>` | string | `root.atsign.org` | atDirectory server. Use `proxy:<host>:443` to send **all** atProtocol control-plane traffic to one reverse proxy on one port (restricted egress; honored by onboarding too). |
 | `set / noports key-file <path>` | string | `/etc/opt/noports/keys/device.atKeys` | Where the APKAM atKeys live. The onboarding script writes here; the agent polls for this file when enabled. |
 
@@ -28,8 +28,8 @@ save startup        # persist across reboot and app_mgr reload
 
 | Command | Type / values | Default | Effect |
 |---|---|---|---|
-| `set / noports access managers [ @a @b ]` | leaf-list of atSigns | — | atSigns with direct access. When `policy` is also set, managers bypass the policy check (break-glass list). |
-| `set / noports access policy @<atsign>` | atSign | — | Delegate access decisions to a NoPorts Policy Service — the fleet-scale alternative to per-router manager lists. |
+| `set / noports access managers [ @a @b ]` | leaf-list of Atsigns | — | Atsigns with direct access. When `policy` is also set, managers bypass the policy check (break-glass list). |
+| `set / noports access policy @<atsign>` | Atsign | — | Delegate access decisions to a NoPorts Policy Service — the fleet-scale alternative to per-router manager lists. |
 | `set / noports access permit-open [ host:port ... ]` | leaf-list | NoPorts defaults¹ | host:port pairs `npt` clients may reach, e.g. `localhost:22 localhost:57400` for SSH + gNMI. |
 
 ¹ Empty means NoPorts' own defaults: `localhost:22,localhost:3389` without
@@ -56,7 +56,7 @@ a policy; `*:*` (defer to policy) when `access policy` is set.
 | Command | Type / values | Default | Effect |
 |---|---|---|---|
 | `set / noports runtime verbose <true\|false>` | boolean | `true` | INFO-level sshnpd logging. |
-| `set / noports runtime clear-cached-pks <true\|false>` | boolean | `false` | Clear cached public keys on next start — use after resetting an atSign. |
+| `set / noports runtime clear-cached-pks <true\|false>` | boolean | `false` | Clear cached public keys on next start — use after resetting an Atsign. |
 
 ## Inspecting configuration and state
 
@@ -100,7 +100,7 @@ The agent is a normal SR Linux application; sshnpd is its supervised child
 
 | Path / command | Purpose |
 |---|---|
-| `sudo /opt/noports/onboard-noports.sh <passcode>` | One-time APKAM enrollment; reads atSign/device/root-server from the running config. |
+| `sudo /opt/noports/onboard-noports.sh <passcode>` | One-time APKAM enrollment; reads Atsign/device/root-server from the running config. |
 | `/etc/opt/noports/sshnpd.yaml` | The NoPorts config file the agent renders on every commit — **read-only for humans**; change `/ noports` and commit instead. |
 | `/etc/opt/noports/keys/` | APKAM atKeys (created by onboarding). Delete + `at_activate revoke` + re-onboard to re-enroll. |
 | `/var/log/srlinux/stdout/noports.log` | Agent and sshnpd output (rotated as `noports.<timestamp>.log`). |
@@ -141,7 +141,7 @@ Temporarily disable NoPorts access:
 set / noports admin-state disable ; commit now (two commands)
 ```
 
-Rotate to a new manager atSign:
+Rotate to a new manager Atsign:
 
 ```text
 enter candidate

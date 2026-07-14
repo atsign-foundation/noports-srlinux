@@ -22,7 +22,7 @@ module noports {
         type string {
             pattern '@.+';
         }
-        description "An atSign, including the leading @";
+        description "An Atsign, including the leading @";
     }
 
     container noports {
@@ -42,7 +42,7 @@ module noports {
 
         leaf device-atsign {
             type atsign;
-            description "The atSign identifying this router";
+            description "The Atsign identifying this router";
         }
 
         leaf root-server {
@@ -68,14 +68,14 @@ module noports {
             leaf-list managers {
                 type atsign;
                 description
-                    "atSigns with direct access to this router (permit-open
+                    "Atsigns with direct access to this router (permit-open
                      applies; policy is ignored for managers)";
             }
 
             leaf policy {
                 type atsign;
                 description
-                    "atSign of a NoPorts policy service for fine-grained,
+                    "Atsign of a NoPorts policy service for fine-grained,
                      delegated authorization";
             }
 
@@ -154,7 +154,7 @@ module noports {
                 default false;
                 description
                     "Clear the cached public keys on next start (use after
-                     resetting an atSign)";
+                     resetting an Atsign)";
             }
         }
 

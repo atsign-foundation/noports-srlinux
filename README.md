@@ -50,7 +50,7 @@ command, the state model, and common recipes.
 Install the `.deb` from the
 [releases page](https://github.com/atsign-foundation/noports-srlinux/releases),
 configure `/noports` from the CLI, onboard with a one-time passcode. You
-will need NoPorts atSigns for your devices; start at
+will need NoPorts Atsigns for your devices; start at
 [noports.com](https://noports.com).
 
 ### Contributors
@@ -103,7 +103,7 @@ set / noports access policy @policy_np          # delegated authorization
 set / noports access permit-open [ localhost:22 localhost:57400 ]
 set / noports device group core-routers         # fleet management
 set / noports ssh sshd-port 2022
-set / noports runtime clear-cached-pks true     # after an atSign reset
+set / noports runtime clear-cached-pks true     # after an Atsign reset
 ```
 
 Since release 24.3.1 SR Linux is Debian-based, so the deliverable is a
@@ -136,7 +136,7 @@ commit now
 ### Onboard the device with APKAM (no atKeys files copied around)
 
 Enrollment cuts new, scope-limited APKAM keys **on the router**; the full
-atKeys file for the device atSign never leaves the administrator's custody.
+atKeys file for the device Atsign never leaves the administrator's custody.
 
 On the admin machine (any host with an authorized key for `@mydevice`):
 
@@ -196,13 +196,13 @@ sessions time out after "Waiting for response from the device daemon" with
 `TimeoutException` in the daemon log as srv dials a high port (data plane,
 fix with `--443`).
 
-## Fleet-scale access control: policy atSigns
+## Fleet-scale access control: policy Atsigns
 
-Listing manager atSigns per router works for a handful of devices, but at
+Listing manager Atsigns per router works for a handful of devices, but at
 fleet scale it means touching every router's config to grant or revoke an
-operator's access. A **policy atSign** centralizes that decision: the
+operator's access. A **policy Atsign** centralizes that decision: the
 router delegates each incoming request to a
-[NoPorts Policy Service](https://docs.noports.com) running as that atSign,
+[NoPorts Policy Service](https://docs.noports.com) running as that Atsign,
 which answers allow/deny based on centrally-managed rules (who, which
 device group, which ports).
 
@@ -218,7 +218,7 @@ set):
   router config never changes as staff or entitlements change. NoPorts'
   `permit-open` default also shifts from `localhost:22,localhost:3389` to
   `*:*`, deferring port restrictions to policy.
-- **managers + policy** — atSigns in `access managers` get direct access
+- **managers + policy** — Atsigns in `access managers` get direct access
   (policy is not consulted for them); everyone else is checked against the
   policy service. Useful as a break-glass list alongside central control.
 

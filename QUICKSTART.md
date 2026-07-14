@@ -5,9 +5,9 @@ Zero to an SSH session with no open ports — two paths: a free virtual lab
 
 ## What you need first
 
-- Two atSigns: one for the router (e.g. `@mydevice`) and one for you as the
+- Two Atsigns: one for the router (e.g. `@mydevice`) and one for you as the
   manager (e.g. `@manager`) — get them at [noports.com](https://noports.com)
-- The manager atSign activated on your own machine, with the NoPorts client
+- The manager Atsign activated on your own machine, with the NoPorts client
   installed ([client install guide](https://docs.noports.com))
 - For the lab path: a Linux host with Docker and
   [containerlab](https://containerlab.dev/install/)
@@ -41,7 +41,7 @@ info from state / noports state   # expect: oper-state awaiting-onboarding
 Onboard the (virtual) router with APKAM:
 
 ```bash
-# on your machine: generate a one-time passcode for the device atSign
+# on your machine: generate a one-time passcode for the device Atsign
 at_activate otp -a @mydevice
 
 # on the SR Linux node: drop to the shell with `bash`, then
@@ -169,7 +169,7 @@ Note: `save startup` after configuring — an `app_mgr reload` replays the
 | App not listed in `show system application noports` | `tools system app-management application app_mgr reload`, then check `/etc/opt/srlinux/appmgr/noports.yml` exists. |
 | Onboard script hangs then fails | Enrollment wasn't approved in time — check from your machine with `at_activate list -a @mydevice -s pending`, approve, and re-run. If it never reaches the atServer, test egress: `ip netns exec srbase-mgmt curl -v https://proxy0001.atsign.org:443` and use proxy mode. |
 | Name resolution fails on the node | DNS in the `srbase-mgmt` namespace is separate from the default namespace — check `/etc/resolv.conf` and the mgmt network-instance DNS config. |
-| Daemon runs but `sshnp` can't connect | Verify the client uses the same device name (`-d`), the manager atSign is in `access managers`, and (behind strict ACLs) that the relay chosen with `-r` is reachable outbound from the router. |
+| Daemon runs but `sshnp` can't connect | Verify the client uses the same device name (`-d`), the manager Atsign is in `access managers`, and (behind strict ACLs) that the relay chosen with `-r` is reachable outbound from the router. |
 | Session times out after "Waiting for response from the device daemon" | The daemon log shows srv dialing the relay on a random high port and hitting `TimeoutException` — egress blocks it. Probe from the router: `ip netns exec srbase-mgmt bash -c 'echo > /dev/tcp/portquiz.net/34137'`. Fix: add `--443` (and `--relay-auth-mode escr`) to the client command to keep the relay data path on 443. |
 | Enrollment hangs at "submitting enrollment request" | Control-plane egress is blocked (atDirectory port 64 / atServer high ports). Set `root-server proxy:proxy0001.atsign.org:443` **before** enrolling. |
 | Re-enrolling a device | Delete the key file in `/etc/opt/noports/keys/`, revoke the old enrollment (`at_activate revoke`), and run the onboard script again. |
