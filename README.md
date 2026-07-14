@@ -33,7 +33,9 @@ A:srl1# info from state / noports state
 ```
 
 **New here? Start with the [Quickstart](QUICKSTART.md)** — virtual lab to
-SSH session, no hardware required.
+SSH session, no hardware required. Operating a router? The
+**[CLI reference](docs/cli-reference.md)** documents every `/ noports`
+command, the state model, and common recipes.
 
 ## Who is this for?
 
